@@ -1,0 +1,26 @@
+input_file: "Week08 Netadd_BPM_ADH.xlsx"
+output_file: "Week08_Slides.pptx"
+week_label: "WK08"
+quarter_label: "Q1'27"
+
+# "all" or a list like: [CISCO, GOOGLE, AMAZON]
+accounts: all
+
+# which metrics to generate slides for
+metrics: [RU, RD, Netadd]
+
+# Slide layout:
+#   per_account         → one slide per account per metric (CISCO-RU, CISCO-RD, ...)
+#   per_metric          → one slide per metric, all accounts in a ranked table
+#   per_account_combined → one slide per account showing all 3 metrics side-by-side
+layout: per_account
+
+# Chart type on each slide:
+#   bar   → grouped bar: Plan QTR vs WK Act vs BPM values
+#   kpi   → large colour-coded KPI cards only, no chart
+#   all   → bar chart on left + KPI cards on right (recommended)
+chart_type: all
+
+# Supply a folder of previous-week xlsx files to enable line chart trend mode
+# e.g. historical_dir: "historical/"
+historical_dir: null
