@@ -529,7 +529,8 @@ def add_summary_slide(prs, all_data: dict, week_label: str, quarter_label: str):
 
 def add_grouped_accounts_slide(prs, records: list, metric: str,
                                 week_label: str, quarter_label: str,
-                                chart_path: str = None):
+                                chart_path: str = None,
+                                group_name: str = ''):
     """
     One slide showing multiple tagged accounts in a side-by-side comparison table.
     Each account gets a row; columns show key metrics with colour-coded gaps.
@@ -543,7 +544,8 @@ def add_grouped_accounts_slide(prs, records: list, metric: str,
     _add_rect(slide, 0, 0, SLIDE_W, hdr_h, fill_rgb=NAVY)
 
     account_names = ' · '.join(r['account'] for r in records)
-    display_names = account_names if len(account_names) <= 80 else account_names[:77] + '…'
+    display_names = account_names if len(account_names) <= 90 else account_names[:87] + '…'
+    title_label   = group_name if group_name else 'Comparison Slide'
 
     badge_w = Inches(1.3)
     _add_rect(slide, Inches(0.15), Inches(0.1), badge_w, Inches(0.58),
@@ -552,12 +554,14 @@ def add_grouped_accounts_slide(prs, records: list, metric: str,
                   metric, font_size=Pt(22), bold=True, color=WHITE,
                   align=PP_ALIGN.CENTER)
 
-    _add_text_box(slide, Inches(1.6), Inches(0.13), Inches(8.5), Inches(0.3),
-                  'Comparison Slide', font_size=Pt(9), bold=False,
+    # group name (tag) in large text
+    _add_text_box(slide, Inches(1.6), Inches(0.08), Inches(8.8), Inches(0.35),
+                  title_label, font_size=Pt(14), bold=True,
+                  color=WHITE, align=PP_ALIGN.LEFT)
+    # account names in smaller subtext
+    _add_text_box(slide, Inches(1.6), Inches(0.42), Inches(8.8), Inches(0.28),
+                  display_names, font_size=Pt(8.5), bold=False,
                   color=LBLUE, align=PP_ALIGN.LEFT)
-    _add_text_box(slide, Inches(1.6), Inches(0.38), Inches(8.5), Inches(0.3),
-                  display_names, font_size=Pt(9), bold=True, color=WHITE,
-                  align=PP_ALIGN.LEFT)
     _add_text_box(slide, Inches(11.0), Inches(0.2), Inches(2.2), Inches(0.42),
                   f'{week_label}  |  {quarter_label}',
                   font_size=Pt(10), bold=False, color=LBLUE, align=PP_ALIGN.RIGHT)

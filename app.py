@@ -151,50 +151,89 @@ if uploaded and selected_metrics:
         st.stop()
 
 
-# ── account filter + group tagging ────────────────────────────────────────────
+# ── account groups ────────────────────────────────────────────────────────────
 selected_accounts = "all"
-tagged_accounts   = []
+groups            = []          # list of {"name": str, "accounts": [...]}
 also_individual   = True
 
 if data_loaded:
+    all_union = sorted(set(a for accs in all_accounts_by_metric.values() for a in accs))
+
+    # initialise session state
+    if 'groups' not in st.session_state:
+        st.session_state.groups = []
+
     col_filter, col_preview = st.columns([1, 2], gap="large")
 
     with col_filter:
-        st.markdown("### 🏢 Account Selection")
-        all_union = sorted(set(a for accs in all_accounts_by_metric.values() for a in accs))
-
-        filter_mode = st.radio("", ["All accounts", "Select specific"], horizontal=True)
-
+        # ── individual account filter ──────────────────────────────────────────
+        st.markdown("### 🏢 Individual Slides")
+        filter_mode = st.radio("", ["All accounts", "Select specific"],
+                               horizontal=True, key="filter_mode")
         if filter_mode == "Select specific":
             selected_accounts = st.multiselect(
-                "Choose accounts for individual slides",
+                "Accounts for individual slides",
                 options=all_union,
                 default=all_union[:5],
-                help="Each selected account gets its own slide(s)",
             )
             if not selected_accounts:
                 selected_accounts = "all"
         else:
             selected_accounts = "all"
 
-        st.markdown("---")
-        st.markdown("### 🏷️ Group / Comparison Slide")
-        st.caption("Tag companies to appear together on one combined comparison slide per metric.")
-
-        tag_options = all_union if selected_accounts == "all" else list(selected_accounts)
-        tagged_accounts = st.multiselect(
-            "Tag accounts for group slide",
-            options=tag_options,
-            default=[],
-            help="Tagged accounts appear side-by-side in a single comparison table slide.",
-        )
-
-        if tagged_accounts:
+        if st.session_state.groups:
             also_individual = st.checkbox(
-                "Also generate individual slides for tagged accounts",
+                "Also generate individual slides for grouped accounts",
                 value=True,
-                help="On = tagged accounts get both a group slide AND their own slide.",
             )
+
+        st.markdown("---")
+
+        # ── named group builder ────────────────────────────────────────────────
+        st.markdown("### 🏷️ Account Groups")
+        st.caption("Each group generates **3 slides** (RU · RD · Netadd) with the group name as the title.")
+
+        # render existing groups
+        to_delete = None
+        for i, grp in enumerate(st.session_state.groups):
+            with st.expander(
+                f"{'📌 ' + grp['name'] if grp['name'] else f'Group {i+1} (unnamed)'}",
+                expanded=True
+            ):
+                c1, c2 = st.columns([5, 1])
+                with c1:
+                    new_name = st.text_input(
+                        "Group tag / name",
+                        value=grp['name'],
+                        key=f"gname_{i}",
+                        placeholder="e.g. Tier 1, Healthcare, APAC...",
+                    )
+                    st.session_state.groups[i]['name'] = new_name
+                with c2:
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    if st.button("🗑️", key=f"gdel_{i}", help="Remove this group"):
+                        to_delete = i
+
+                picked = st.multiselect(
+                    "Accounts in this group",
+                    options=all_union,
+                    default=[a for a in grp['accounts'] if a in all_union],
+                    key=f"gaccs_{i}",
+                )
+                st.session_state.groups[i]['accounts'] = picked
+
+                if picked:
+                    st.caption(f"{len(picked)} accounts · generates {len(selected_metrics)} slides")
+
+        if to_delete is not None:
+            st.session_state.groups.pop(to_delete)
+            st.rerun()
+
+        if st.button("➕  Add Group", use_container_width=True):
+            st.session_state.groups.append({"name": "", "accounts": []})
+            st.rerun()
+
+    groups = [g for g in st.session_state.groups if g['accounts']]
 
 
 # ── data preview ───────────────────────────────────────────────────────────────
@@ -274,12 +313,12 @@ if not data_loaded:
 elif not selected_metrics:
     st.warning("Select at least one metric in the sidebar.")
 else:
-    group_extra = len(selected_metrics) if tagged_accounts else 0
-    indiv_count = sum(
+    group_slides  = len(groups) * len(selected_metrics)
+    indiv_count   = sum(
         len(all_data[m]) if layout in ("per_account", "per_account_combined") else 1
         for m in selected_metrics
     )
-    n_slides_est = indiv_count + group_extra + 2  # title + summary
+    n_slides_est  = indiv_count + group_slides + 2  # title + summary
 
     col_btn, col_info = st.columns([1, 3])
     with col_info:
@@ -301,7 +340,6 @@ else:
         try:
             # filter by selected accounts
             filtered = {}
-            tagged_upper = [a.upper() for a in tagged_accounts]
             for m in selected_metrics:
                 recs = all_data[m]
                 if selected_accounts != "all":
@@ -314,42 +352,53 @@ else:
             add_summary_slide(prs, filtered, week_label, quarter_label)
 
             chart_tmp   = tempfile.mkdtemp(prefix="wipro_charts_")
-            group_steps = len(selected_metrics) if tagged_accounts else 0
+            all_grouped_uppers = {
+                a.upper()
+                for g in groups
+                for a in g['accounts']
+            }
+            group_steps = len(groups) * len(selected_metrics)
             indiv_steps = sum(
                 len(filtered[m]) if layout in ("per_account", "per_account_combined") else 1
                 for m in selected_metrics
             )
-            total_steps = indiv_steps + group_steps or 1
+            total_steps = max(indiv_steps + group_steps, 1)
             step = 0
 
+            # ── named group slides (RU → RD → Netadd per group) ──────────────
+            for grp in groups:
+                grp_name   = grp['name'] or 'Group'
+                grp_upper  = [a.upper() for a in grp['accounts']]
+
+                for metric in selected_metrics:
+                    grp_recs = [r for r in filtered[metric]
+                                if r['account'].upper() in grp_upper]
+                    if not grp_recs:
+                        step += 1
+                        continue
+                    status.markdown(
+                        f"Building **{grp_name}** — {metric} "
+                        f"({len(grp_recs)} accounts)…"
+                    )
+                    grp_chart = build_group_comparison_chart(grp_recs, metric, chart_tmp)
+                    add_grouped_accounts_slide(
+                        prs, grp_recs, metric,
+                        week_label, quarter_label,
+                        chart_path=grp_chart,
+                        group_name=grp_name,
+                    )
+                    step += 1
+                    progress.progress(min(step / total_steps, 1.0),
+                                      text=f"{grp_name} — {metric}")
+
+            # ── individual slides ─────────────────────────────────────────────
             for metric in selected_metrics:
                 records = filtered[metric]
 
-                # ── group / comparison slide for tagged accounts ───────────────
-                if tagged_accounts:
-                    tagged_recs = [r for r in records
-                                   if r['account'].upper() in tagged_upper]
-                    if tagged_recs:
-                        status.markdown(
-                            f"Building **{metric}** group slide "
-                            f"({len(tagged_recs)} accounts)…"
-                        )
-                        grp_chart = build_group_comparison_chart(
-                            tagged_recs, metric, chart_tmp
-                        )
-                        add_grouped_accounts_slide(
-                            prs, tagged_recs, metric,
-                            week_label, quarter_label, grp_chart,
-                        )
-                    step += 1
-                    progress.progress(min(step / total_steps, 1.0),
-                                      text=f"Group slide: {metric}")
-
-                # ── individual slides ─────────────────────────────────────────
-                # decide which accounts get individual slides
-                if tagged_accounts and not also_individual:
+                # skip grouped accounts if "also individual" is off
+                if groups and not also_individual:
                     indiv_recs = [r for r in records
-                                  if r['account'].upper() not in tagged_upper]
+                                  if r['account'].upper() not in all_grouped_uppers]
                 else:
                     indiv_recs = records
 
@@ -362,8 +411,7 @@ else:
                                               week_label, quarter_label, chart_path)
                     step += 1
                     progress.progress(min(step / total_steps, 1.0),
-                                      text=f"Built {metric} overview")
-
+                                      text=f"Overview — {metric}")
                 else:
                     for rec in indiv_recs:
                         status.markdown(
@@ -373,7 +421,6 @@ else:
                         bar_path = None
                         if chart_type in ("bar", "all"):
                             bar_path = build_bar_chart(rec, chart_tmp)
-
                         add_account_metric_slide(
                             prs, rec, week_label, quarter_label,
                             chart_type=chart_type,
