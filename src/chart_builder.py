@@ -118,6 +118,53 @@ def build_gap_trend_chart(rec: dict, tmp_dir: str) -> str:
     return path
 
 
+def build_group_comparison_chart(records: list, metric: str, tmp_dir: str) -> str:
+    """
+    Grouped bar chart comparing Gap and BPM Gap across tagged accounts.
+    Used in the group/comparison slide.
+    """
+    accounts = [r['account'] for r in records]
+    gaps     = [r.get('gap') or 0     for r in records]
+    bpm_gaps = [r.get('bpm_gap') or 0 for r in records]
+
+    x = np.arange(len(accounts))
+    width = 0.35
+
+    fig, ax = plt.subplots(figsize=(6.0, max(3.2, len(accounts) * 0.55)))
+    fig.patch.set_facecolor('white')
+    fig.subplots_adjust(top=0.88, bottom=0.18, left=0.08, right=0.97)
+
+    bars1 = ax.bar(x - width/2, gaps,     width, label=f'{metric} Gap',
+                   color=[_bar_color(v) for v in gaps], alpha=0.9, zorder=3)
+    bars2 = ax.bar(x + width/2, bpm_gaps, width, label=f'{metric} BPM Gap',
+                   color=[_bar_color(v) for v in bpm_gaps], alpha=0.5, zorder=3)
+
+    for bar in list(bars1) + list(bars2):
+        h = bar.get_height()
+        va = 'bottom' if h >= 0 else 'top'
+        offset = 0.3 if h >= 0 else -0.3
+        ax.text(bar.get_x() + bar.get_width() / 2, h + offset,
+                f'{h:.1f}' if h != int(h) else str(int(h)),
+                ha='center', va=va, fontsize=7, fontweight='bold', color='#222222')
+
+    ax.set_xticks(x)
+    ax.set_xticklabels(accounts, fontsize=8, rotation=15, ha='right')
+    ax.axhline(0, color='#444444', linewidth=0.8, zorder=2)
+    ax.set_title(f'{metric} — Gap Comparison', fontsize=10,
+                 fontweight='bold', color=C_NAVY, pad=8)
+    ax.grid(axis='y', linestyle='--', alpha=0.4, zorder=1)
+    ax.set_facecolor('#F8F9FA')
+    ax.legend(fontsize=7.5, framealpha=0.8, loc='best')
+    for spine in ax.spines.values():
+        spine.set_edgecolor('#CCCCCC')
+
+    label = '_'.join(r['account'][:6] for r in records[:3])
+    path = os.path.join(tmp_dir, f'group_{metric}_{label}.png')
+    fig.savefig(path, dpi=140, bbox_inches=None)
+    plt.close(fig)
+    return path
+
+
 def build_overview_chart(records: list, metric: str, tmp_dir: str) -> str:
     """
     Horizontal bar chart of WK Act for all accounts — used in per_metric layout.

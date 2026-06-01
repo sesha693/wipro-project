@@ -525,3 +525,122 @@ def add_summary_slide(prs, all_data: dict, week_label: str, quarter_label: str):
                           sw - Inches(0.18), card_h - Inches(0.38),
                           val, font_size=Pt(20), bold=True, color=txt_c,
                           align=PP_ALIGN.CENTER)
+
+
+def add_grouped_accounts_slide(prs, records: list, metric: str,
+                                week_label: str, quarter_label: str,
+                                chart_path: str = None):
+    """
+    One slide showing multiple tagged accounts in a side-by-side comparison table.
+    Each account gets a row; columns show key metrics with colour-coded gaps.
+    An optional bar chart comparing gaps sits in the bottom-right.
+    """
+    slide = _blank_slide(prs)
+    n = len(records)
+
+    # ── header ────────────────────────────────────────────────────────────────
+    hdr_h = Inches(0.78)
+    _add_rect(slide, 0, 0, SLIDE_W, hdr_h, fill_rgb=NAVY)
+
+    account_names = ' · '.join(r['account'] for r in records)
+    display_names = account_names if len(account_names) <= 80 else account_names[:77] + '…'
+
+    badge_w = Inches(1.3)
+    _add_rect(slide, Inches(0.15), Inches(0.1), badge_w, Inches(0.58),
+              fill_rgb=BLUE, line_rgb=None)
+    _add_text_box(slide, Inches(0.15), Inches(0.1), badge_w, Inches(0.58),
+                  metric, font_size=Pt(22), bold=True, color=WHITE,
+                  align=PP_ALIGN.CENTER)
+
+    _add_text_box(slide, Inches(1.6), Inches(0.13), Inches(8.5), Inches(0.3),
+                  'Comparison Slide', font_size=Pt(9), bold=False,
+                  color=LBLUE, align=PP_ALIGN.LEFT)
+    _add_text_box(slide, Inches(1.6), Inches(0.38), Inches(8.5), Inches(0.3),
+                  display_names, font_size=Pt(9), bold=True, color=WHITE,
+                  align=PP_ALIGN.LEFT)
+    _add_text_box(slide, Inches(11.0), Inches(0.2), Inches(2.2), Inches(0.42),
+                  f'{week_label}  |  {quarter_label}',
+                  font_size=Pt(10), bold=False, color=LBLUE, align=PP_ALIGN.RIGHT)
+
+    # ── layout split: table left (55%), chart right (45%) ────────────────────
+    tbl_w    = SLIDE_W * (1.0 if not chart_path else 0.56)
+    tbl_x    = Inches(0.1)
+    tbl_y    = hdr_h + Inches(0.08)
+    tbl_h    = SLIDE_H - tbl_y - Inches(0.1)
+
+    col_defs = [
+        ('Account',      Inches(1.7),  'account',        None,       False, False),
+        ('Plan QTR',     Inches(0.9),  'fmt_plan_qtr',   None,       False, False),
+        ('WK Plan',      Inches(0.85), 'fmt_wk_plan',    None,       False, False),
+        ('WK Act',       Inches(0.85), 'fmt_wk_act',     None,       False, False),
+        ('Gap',          Inches(0.85), 'fmt_gap',        'gap',      True,  False),
+        ('WoW',          Inches(0.75), 'fmt_wow',        'wow',      False, True),
+        ('BPM Plan',     Inches(0.85), 'fmt_bpm_plan_qtr', None,     False, False),
+        ('BPM Act',      Inches(0.85), 'fmt_bpm_wk_act', None,       False, False),
+        ('BPM Gap',      Inches(0.85), 'fmt_bpm_gap',    'bpm_gap',  True,  False),
+        ('BPM WoW',      Inches(0.75), 'fmt_bpm_wow',    'bpm_wow',  False, True),
+        ('Delta Reason', Inches(2.2),  'delta_reason',   None,       False, False),
+    ]
+
+    # trim columns to fit table width
+    total_col_w = sum(c[1] for c in col_defs)
+    if total_col_w > tbl_w - Inches(0.1):
+        # drop Delta Reason if tight
+        col_defs = col_defs[:-1]
+        total_col_w = sum(c[1] for c in col_defs)
+
+    hdr_row_h = Inches(0.36)
+    data_row_h = min(Inches(0.52), (tbl_h - hdr_row_h) / max(n, 1))
+
+    # header row
+    cx = tbl_x
+    for (lbl, cw, _, __, _g, _w) in col_defs:
+        _add_rect(slide, cx, tbl_y, cw - Inches(0.02), hdr_row_h,
+                  fill_rgb=NAVY, line_rgb=None)
+        _add_text_box(slide, cx + Inches(0.04), tbl_y + Inches(0.07),
+                      cw - Inches(0.1), hdr_row_h - Inches(0.1),
+                      lbl, font_size=Pt(7.5), bold=True, color=WHITE,
+                      align=PP_ALIGN.CENTER)
+        cx += cw
+
+    # data rows
+    for ri, rec in enumerate(records):
+        ry = tbl_y + hdr_row_h + ri * data_row_h
+        row_fill = WHITE if ri % 2 == 0 else LGRAY
+        cx = tbl_x
+
+        for ci, (lbl, cw, key, raw_key, is_gap, is_wow) in enumerate(col_defs):
+            raw_v = rec.get(raw_key) if raw_key else None
+            val   = rec.get(key, '—') or '—'
+
+            if is_gap and raw_v is not None:
+                txt_c, fill_c = _gap_color(raw_v)
+            elif is_wow:
+                fill_c = row_fill
+                txt_c  = _wow_color(raw_v)
+                val    = _wow_label(raw_v)
+            elif ci == 0:
+                fill_c = row_fill
+                txt_c  = NAVY
+            else:
+                fill_c = row_fill
+                txt_c  = DGRAY
+
+            if isinstance(val, float):
+                val = f'{val:.1f}' if val != int(val) else str(int(val))
+            val = str(val)[:45]  # truncate long text
+
+            _add_rect(slide, cx, ry, cw - Inches(0.02), data_row_h,
+                      fill_rgb=fill_c, line_rgb=RGBColor(0xDD, 0xDD, 0xDD))
+            align = PP_ALIGN.LEFT if ci in (0, len(col_defs) - 1) else PP_ALIGN.CENTER
+            _add_text_box(slide, cx + Inches(0.04), ry + Inches(0.06),
+                          cw - Inches(0.1), data_row_h - Inches(0.08),
+                          val, font_size=Pt(8 if ci == 0 else 9),
+                          bold=(ci == 0), color=txt_c, align=align, wrap=True)
+            cx += cw
+
+    # ── chart (right panel) ───────────────────────────────────────────────────
+    if chart_path:
+        chart_x = tbl_w + Inches(0.15)
+        chart_w = SLIDE_W - chart_x - Inches(0.1)
+        slide.shapes.add_picture(chart_path, chart_x, tbl_y, chart_w, tbl_h)
