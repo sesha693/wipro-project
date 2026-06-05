@@ -21,6 +21,16 @@ def _bar_color(val):
     return C_BLUE if val >= 0 else C_RED
 
 
+def _chart_value(metric: str, value):
+    if value is None:
+        return 0
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        return 0
+    return abs(v) if metric == 'RD' else v
+
+
 def build_bar_chart(rec: dict, tmp_dir: str) -> str:
     """
     Grouped bar chart: main metric vs BPM metric.
@@ -29,12 +39,8 @@ def build_bar_chart(rec: dict, tmp_dir: str) -> str:
     metric = rec['metric']
 
     groups = ['Plan QTR', 'WK Plan', 'WK Act']
-    main_vals = [rec.get('plan_qtr'), rec.get('wk_plan'), rec.get('wk_act')]
-    bpm_vals  = [rec.get('bpm_plan_qtr'), rec.get('bpm_wk_plan'), rec.get('bpm_wk_act')]
-
-    # replace None with 0 for plotting
-    main_vals = [v if v is not None else 0 for v in main_vals]
-    bpm_vals  = [v if v is not None else 0 for v in bpm_vals]
+    main_vals = [_chart_value(metric, rec.get('plan_qtr')), _chart_value(metric, rec.get('wk_plan')), _chart_value(metric, rec.get('wk_act'))]
+    bpm_vals  = [_chart_value(metric, rec.get('bpm_plan_qtr')), _chart_value(metric, rec.get('bpm_wk_plan')), _chart_value(metric, rec.get('bpm_wk_act'))]
 
     x = np.arange(len(groups))
     width = 0.35
@@ -124,8 +130,8 @@ def build_group_comparison_chart(records: list, metric: str, tmp_dir: str) -> st
     Used in the group/comparison slide.
     """
     accounts = [r['account'] for r in records]
-    gaps     = [r.get('gap') or 0     for r in records]
-    bpm_gaps = [r.get('bpm_gap') or 0 for r in records]
+    gaps     = [_chart_value(metric, r.get('gap'))     for r in records]
+    bpm_gaps = [_chart_value(metric, r.get('bpm_gap')) for r in records]
 
     x = np.arange(len(accounts))
     width = 0.35
@@ -170,8 +176,8 @@ def build_overview_chart(records: list, metric: str, tmp_dir: str) -> str:
     Horizontal bar chart of WK Act for all accounts — used in per_metric layout.
     """
     accounts = [r['account'] for r in records]
-    acts     = [r.get('wk_act') or 0 for r in records]
-    plans    = [r.get('wk_plan') or 0 for r in records]
+    acts     = [_chart_value(metric, r.get('wk_act')) for r in records]
+    plans    = [_chart_value(metric, r.get('wk_plan')) for r in records]
 
     fig, ax = plt.subplots(figsize=(9, max(4.0, len(accounts) * 0.35)))
     fig.subplots_adjust(top=0.92, bottom=0.08, left=0.22, right=0.97)

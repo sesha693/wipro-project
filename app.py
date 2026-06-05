@@ -1,5 +1,6 @@
 import io
 import os
+import re
 import sys
 import tempfile
 import shutil
@@ -22,6 +23,23 @@ st.set_page_config(
     page_icon="📊",
     layout="wide",
 )
+
+
+def infer_week_quarter_from_filename(filename: str) -> tuple[str | None, str | None]:
+    if not filename:
+        return None, None
+    name = filename.lower()
+    week = None
+    quarter = None
+    wk_match = re.search(r'\b(?:week|wk)[\s_-]*0*([0-9]{1,2})\b', name)
+    if wk_match:
+        week = f"WK{int(wk_match.group(1)):02d}"
+    q_match = re.search(r"\b(q[1-4])(?:[\'’]?(\d{2,4}))?\b", name)
+    if q_match:
+        quarter = q_match.group(1).upper()
+        if q_match.group(2):
+            quarter = f"{quarter}'{q_match.group(2)}"
+    return week, quarter
 
 # ── custom CSS ────────────────────────────────────────────────────────────────
 st.markdown("""
@@ -75,6 +93,18 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
+# ── file uploader — full width (avoids column rendering issues) ───────────────
+st.markdown("### 📁 Upload Data File")
+uploaded = st.file_uploader(
+    "Select your weekly Netadd_BPM_ADH xlsx file",
+    type=["xlsx"],
+    help="Upload the weekly xlsx exported from the BPM tracker",
+)
+if uploaded:
+    st.success(f"✅  **{uploaded.name}**  —  {uploaded.size / 1024:.0f} KB loaded")
+
+week_label_hint, quarter_label_hint = infer_week_quarter_from_filename(uploaded.name if uploaded else "")
+
 # ── sidebar ───────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown("""
@@ -86,8 +116,24 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("### ⚙️ Generation Settings")
 
-    week_label    = st.text_input("Week Label",    value="WK08")
-    quarter_label = st.text_input("Quarter Label", value="Q1'27")
+    week_label_default = "WK08"
+    quarter_label_default = "Q1'27"
+    if uploaded:
+        if week_label_hint:
+            week_label_default = week_label_hint
+        if quarter_label_hint:
+            quarter_label_default = quarter_label_hint
+
+    if 'week_label' not in st.session_state:
+        st.session_state.week_label = week_label_default
+    if 'quarter_label' not in st.session_state:
+        st.session_state.quarter_label = quarter_label_default
+
+    week_label = st.text_input("Week Label", value=st.session_state.week_label, key="week_label")
+    quarter_label = st.text_input("Quarter Label", value=st.session_state.quarter_label, key="quarter_label")
+
+    if uploaded and week_label_hint:
+        st.info(f"Detected week label from filename: {week_label_hint}")
 
     st.markdown("**Metrics to include**")
     inc_ru     = st.checkbox("RU — Resource Utilisation", value=True)
@@ -116,18 +162,9 @@ with st.sidebar:
         }[x],
     )
 
-    output_name = st.text_input("Output filename", value=f"{week_label}_Slides.pptx")
-
-
-# ── file uploader — full width (avoids column rendering issues) ───────────────
-st.markdown("### 📁 Upload Data File")
-uploaded = st.file_uploader(
-    "Select your weekly Netadd_BPM_ADH xlsx file",
-    type=["xlsx"],
-    help="Upload the weekly xlsx exported from the BPM tracker",
-)
-if uploaded:
-    st.success(f"✅  **{uploaded.name}**  —  {uploaded.size / 1024:.0f} KB loaded")
+    if 'output_name' not in st.session_state:
+        st.session_state.output_name = f"{week_label}_Slides.pptx"
+    output_name = st.text_input("Output filename", value=st.session_state.output_name, key="output_name")
 
 st.markdown("---")
 
