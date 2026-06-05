@@ -47,14 +47,15 @@ _SHEET_MAP = {
         'col_map': {
             'Account':             'account',
             'Net Plan Q1':         'plan_qtr',
-            'Net Plan':       'wk_plan',
-            'Net Act':        'wk_act',
+            'Net Plan QTR':        'plan_qtr',
+            'Net Plan':            'wk_plan',
+            'Net Act':             'wk_act',
             'Net Gap':             'gap',
             'Prev WK GAP':         'prev_gap',
             'WOW':                 'wow',
-            'Net Plan BPM':        'bpm_plan_qtr',
-            'Net Plan BPM':   'bpm_wk_plan',
-            'Net Act BPM':    'bpm_wk_act',
+            'Net Plan BPM QTR':    'bpm_plan_qtr',
+            'Net Plan BPM':        'bpm_wk_plan',
+            'Net Act BPM':         'bpm_wk_act',
             'Net BPM Gap':         'bpm_gap',
             'PREV WEEK ACT BPM':   'bpm_prev_gap',
             'WOW BPM':             'bpm_wow',
@@ -65,12 +66,88 @@ _SHEET_MAP = {
 }
 
 
+def _text(val):
+    """Clean text value."""
+    if val is None or (isinstance(val, float) and pd.isna(val)):
+        return ''
+    return str(val).strip()
+
+
+def _normalize_column_label(value: str) -> str:
+    if value is None:
+        return ''
+    text = str(value).strip().lower()
+    text = ''.join(ch if ch.isalnum() else ' ' for ch in text)
+    return ' '.join(text.split())
+
+
+def _match_column_name(raw_label: str, known_labels: dict) -> str | None:
+    normalized = _normalize_column_label(raw_label)
+    if normalized in known_labels:
+        return known_labels[normalized]
+
+    tokens = set(normalized.split())
+    if 'account' in tokens:
+        return 'account'
+    if 'recovery' in tokens and 'plan' in tokens:
+        return 'recovery_plan'
+    if 'delta' in tokens and 'reason' in tokens:
+        return 'delta_reason'
+    if 'bpm' in tokens:
+        if 'gap' in tokens:
+            return 'bpm_gap'
+        if 'wow' in tokens:
+            return 'bpm_wow'
+        if 'prev' in tokens and 'gap' in tokens:
+            return 'bpm_prev_gap'
+        if 'plan' in tokens and any(x in tokens for x in ('qtr', 'q1', 'qtd', 'quarter')):
+            return 'bpm_plan_qtr'
+        if 'plan' in tokens:
+            return 'bpm_wk_plan'
+        if 'act' in tokens:
+            return 'bpm_wk_act'
+    if 'gap' in tokens:
+        return 'gap'
+    if 'wow' in tokens:
+        return 'wow'
+    if 'prev' in tokens and 'gap' in tokens:
+        return 'prev_gap'
+    if 'plan' in tokens and any(x in tokens for x in ('qtr', 'q1', 'qtd', 'quarter')):
+        return 'plan_qtr'
+    if 'plan' in tokens:
+        return 'wk_plan'
+    if 'act' in tokens or 'actual' in tokens:
+        return 'wk_act'
+    return None
+
+
+def _clean_number(val):
+    if val is None or (isinstance(val, float) and pd.isna(val)):
+        return None
+    if isinstance(val, str):
+        text = val.strip().replace(',', '').replace(' ', '')
+        if text in ('', '—', '-', 'na', 'n/a'):
+            return None
+        if text.startswith('(') and text.endswith(')'):
+            text = '-' + text[1:-1]
+        try:
+            return float(text)
+        except ValueError:
+            return None
+    try:
+        return float(val)
+    except (TypeError, ValueError):
+        return None
+
+
 def _fmt(val, decimals=1):
     """Format a numeric value, returning '—' for missing data."""
     if val is None or (isinstance(val, float) and pd.isna(val)):
         return '—'
     try:
-        f = float(val)
+        f = _clean_number(val)
+        if f is None:
+            return '—'
         if f == int(f):
             return str(int(f))
         return f'{f:.{decimals}f}'
@@ -81,26 +158,36 @@ def _fmt(val, decimals=1):
 
 def _raw(val):
     """Return float or None."""
-    if val is None or (isinstance(val, float) and pd.isna(val)):
-        return None
-    try:
-        return float(val)
-    except (TypeError, ValueError):
-        return None
-
-
-def _text(val):
-    """Clean text value."""
-    if val is None or (isinstance(val, float) and pd.isna(val)):
-        return ''
-    return str(val).strip()
+    return _clean_number(val)
 
 
 def load_metric(filepath: str, metric: str, accounts_filter) -> list[dict]:
     """Load one metric sheet and return a list of account dicts."""
     cfg = _SHEET_MAP[metric]
-    df = pd.read_excel(filepath, sheet_name=cfg['sheet'], header=1)
-    df = df.rename(columns=cfg['col_map'])
+    xls = pd.ExcelFile(filepath)
+    sheet_name = cfg['sheet']
+    if sheet_name not in xls.sheet_names:
+        lower_names = {n.lower(): n for n in xls.sheet_names}
+        sheet_name = lower_names.get(sheet_name.lower(), sheet_name)
+
+    df = None
+    for header in (0, 1):
+        candidate = pd.read_excel(xls, sheet_name=sheet_name, header=header)
+        normalized_map = {
+            _normalize_column_label(raw): dest
+            for raw, dest in cfg['col_map'].items()
+        }
+        rename_map = {}
+        for col in candidate.columns:
+            mapped = _match_column_name(col, normalized_map)
+            if mapped:
+                rename_map[col] = mapped
+        candidate = candidate.rename(columns=rename_map)
+        if 'account' in candidate.columns:
+            df = candidate
+            break
+    if df is None or 'account' not in df.columns:
+        raise ValueError(f"Unable to locate the account column for metric '{metric}' in sheet '{sheet_name}'")
 
     # drop rows without a valid account name
     df = df[df['account'].notna()]
@@ -109,7 +196,7 @@ def load_metric(filepath: str, metric: str, accounts_filter) -> list[dict]:
 
     if accounts_filter != 'all':
         upper = [a.upper() for a in accounts_filter]
-        df = df[df['account'].str.upper().isin(upper)]
+        df = df[df['account'].astype(str).str.upper().isin(upper)]
 
     records = []
     for _, row in df.iterrows():
