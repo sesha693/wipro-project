@@ -100,7 +100,7 @@ def _match_column_name(raw_label: str, known_labels: dict) -> str | None:
             return 'bpm_wow'
         if 'prev' in tokens and 'gap' in tokens:
             return 'bpm_prev_gap'
-        if 'plan' in tokens and any(x in tokens for x in ('qtr', 'q1', 'qtd', 'quarter')):
+        if 'plan' in tokens and any(x in tokens for x in ('qtr', 'q1', 'quarter')):
             return 'bpm_plan_qtr'
         if 'plan' in tokens:
             return 'bpm_wk_plan'
@@ -112,12 +112,56 @@ def _match_column_name(raw_label: str, known_labels: dict) -> str | None:
         return 'wow'
     if 'prev' in tokens and 'gap' in tokens:
         return 'prev_gap'
-    if 'plan' in tokens and any(x in tokens for x in ('qtr', 'q1', 'qtd', 'quarter')):
+    if 'plan' in tokens and any(x in tokens for x in ('qtr', 'q1', 'quarter')):
         return 'plan_qtr'
     if 'plan' in tokens:
         return 'wk_plan'
     if 'act' in tokens or 'actual' in tokens:
         return 'wk_act'
+    return None
+
+
+def _transpose_sheet_if_needed(candidate: pd.DataFrame, normalized_map: dict) -> pd.DataFrame | None:
+    """Detect and transpose sheets where accounts appear as columns and metrics as rows."""
+    if candidate.shape[1] < 3:
+        return None
+
+    for label_col in (1, 0):
+        account_row = None
+        for row_index in range(min(10, len(candidate))):
+            try:
+                raw = candidate.iat[row_index, label_col]
+            except IndexError:
+                continue
+            if _normalize_column_label(raw) == 'account':
+                account_row = row_index
+                break
+        if account_row is None:
+            continue
+
+        start_col = label_col + 1
+        account_cols = [col for col in range(start_col, candidate.shape[1])
+                        if candidate.iat[account_row, col] is not None and str(candidate.iat[account_row, col]).strip() != '']
+        if not account_cols:
+            continue
+
+        accounts = [str(candidate.iat[account_row, col]).strip() for col in account_cols]
+        records = [{'account': acct} for acct in accounts]
+
+        for row_index in range(account_row + 1, len(candidate)):
+            raw_label = None
+            try:
+                raw_label = candidate.iat[row_index, label_col]
+            except IndexError:
+                pass
+            dest = _match_column_name(raw_label, normalized_map)
+            if not dest:
+                continue
+            for record, col in zip(records, account_cols):
+                record[dest] = candidate.iat[row_index, col]
+
+        return pd.DataFrame(records)
+
     return None
 
 
@@ -185,6 +229,12 @@ def load_metric(filepath: str, metric: str, accounts_filter) -> list[dict]:
         candidate = candidate.rename(columns=rename_map)
         if 'account' in candidate.columns and candidate['account'].notna().any():
             df = candidate
+            break
+
+        # support transposed worksheets where accounts are columns and metrics are rows
+        transposed = _transpose_sheet_if_needed(candidate, normalized_map)
+        if transposed is not None and 'account' in transposed.columns and transposed['account'].notna().any():
+            df = transposed
             break
     if df is None or 'account' not in df.columns:
         raise ValueError(f"Unable to locate the account column for metric '{metric}' in sheet '{sheet_name}'")
