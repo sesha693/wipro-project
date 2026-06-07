@@ -171,7 +171,7 @@ def load_metric(filepath: str, metric: str, accounts_filter) -> list[dict]:
         sheet_name = lower_names.get(sheet_name.lower(), sheet_name)
 
     df = None
-    for header in (0, 1):
+    for header in range(0, 6):
         candidate = pd.read_excel(xls, sheet_name=sheet_name, header=header)
         normalized_map = {
             _normalize_column_label(raw): dest
@@ -183,7 +183,7 @@ def load_metric(filepath: str, metric: str, accounts_filter) -> list[dict]:
             if mapped:
                 rename_map[col] = mapped
         candidate = candidate.rename(columns=rename_map)
-        if 'account' in candidate.columns:
+        if 'account' in candidate.columns and candidate['account'].notna().any():
             df = candidate
             break
     if df is None or 'account' not in df.columns:
@@ -200,33 +200,51 @@ def load_metric(filepath: str, metric: str, accounts_filter) -> list[dict]:
 
     records = []
     for _, row in df.iterrows():
+        wk_plan = _raw(row.get('wk_plan'))
+        wk_act = _raw(row.get('wk_act'))
+        gap = _raw(row.get('gap'))
+        prev_gap = _raw(row.get('prev_gap'))
+        bpm_wk_plan = _raw(row.get('bpm_wk_plan'))
+        bpm_wk_act = _raw(row.get('bpm_wk_act'))
+        bpm_gap = _raw(row.get('bpm_gap'))
+        bpm_prev_gap = _raw(row.get('bpm_prev_gap'))
+        if metric == 'RD':
+            wk_plan = abs(wk_plan) if wk_plan is not None else None
+            wk_act = abs(wk_act) if wk_act is not None else None
+            gap = abs(gap) if gap is not None else None
+            prev_gap = abs(prev_gap) if prev_gap is not None else None
+            bpm_wk_plan = abs(bpm_wk_plan) if bpm_wk_plan is not None else None
+            bpm_wk_act = abs(bpm_wk_act) if bpm_wk_act is not None else None
+            bpm_gap = abs(bpm_gap) if bpm_gap is not None else None
+            bpm_prev_gap = abs(bpm_prev_gap) if bpm_prev_gap is not None else None
+
         rec = {
             'account':       _text(row.get('account')),
             'metric':        metric,
             'plan_qtr':      _text(row.get('plan_qtr')),
-            'wk_plan':       _raw(row.get('wk_plan')),
-            'wk_act':        _raw(row.get('wk_act')),
-            'gap':           _raw(row.get('gap')),
-            'prev_gap':      _raw(row.get('prev_gap')),
+            'wk_plan':       wk_plan,
+            'wk_act':        wk_act,
+            'gap':           gap,
+            'prev_gap':      prev_gap,
             'wow':           _raw(row.get('wow')),
             'bpm_plan_qtr':  _text(row.get('bpm_plan_qtr')),
-            'bpm_wk_plan':   _raw(row.get('bpm_wk_plan')),
-            'bpm_wk_act':    _raw(row.get('bpm_wk_act')),
-            'bpm_gap':       _raw(row.get('bpm_gap')),
-            'bpm_prev_gap':  _raw(row.get('bpm_prev_gap')),
+            'bpm_wk_plan':   bpm_wk_plan,
+            'bpm_wk_act':    bpm_wk_act,
+            'bpm_gap':       bpm_gap,
+            'bpm_prev_gap':  bpm_prev_gap,
             'bpm_wow':       _raw(row.get('bpm_wow')),
             'delta_reason':  _text(row.get('delta_reason')),
             'recovery_plan': _text(row.get('recovery_plan')),
             # formatted display strings
             'fmt_plan_qtr':     _fmt(row.get('plan_qtr')),
-            'fmt_wk_plan':      _fmt(row.get('wk_plan')),
-            'fmt_wk_act':       _fmt(row.get('wk_act')),
-            'fmt_gap':          _fmt(row.get('gap')),
+            'fmt_wk_plan':      _fmt(wk_plan),
+            'fmt_wk_act':       _fmt(wk_act),
+            'fmt_gap':          _fmt(gap),
             'fmt_wow':          _fmt(row.get('wow')),
             'fmt_bpm_plan_qtr': _fmt(row.get('bpm_plan_qtr')),
-            'fmt_bpm_wk_plan':  _fmt(row.get('bpm_wk_plan')),
-            'fmt_bpm_wk_act':   _fmt(row.get('bpm_wk_act')),
-            'fmt_bpm_gap':      _fmt(row.get('bpm_gap')),
+            'fmt_bpm_wk_plan':  _fmt(bpm_wk_plan),
+            'fmt_bpm_wk_act':   _fmt(bpm_wk_act),
+            'fmt_bpm_gap':      _fmt(bpm_gap),
             'fmt_bpm_wow':      _fmt(row.get('bpm_wow')),
         }
         records.append(rec)

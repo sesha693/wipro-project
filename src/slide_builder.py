@@ -185,16 +185,16 @@ def add_account_metric_slide(prs, rec: dict, week_label: str, quarter_label: str
     _add_rect(slide, Inches(0.15), Inches(0.12), badge_w, Inches(0.58),
               fill_rgb=BLUE, line_rgb=None)
     _add_text_box(slide, Inches(0.15), Inches(0.12), badge_w, Inches(0.58),
-                  metric, font_size=Pt(22), bold=True, color=WHITE,
+                  metric, font_size=Pt(26), bold=True, color=WHITE,
                   align=PP_ALIGN.CENTER)
 
     _add_text_box(slide, Inches(1.6), Inches(0.16), Inches(8), Inches(0.55),
-                  account, font_size=Pt(22), bold=True, color=WHITE,
+                  account, font_size=Pt(24), bold=True, color=WHITE,
                   align=PP_ALIGN.LEFT)
 
     _add_text_box(slide, Inches(10.5), Inches(0.2), Inches(2.7), Inches(0.45),
                   f'{week_label}  |  {quarter_label}',
-                  font_size=Pt(11), bold=False, color=LBLUE,
+                  font_size=Pt(12), bold=False, color=LBLUE,
                   align=PP_ALIGN.RIGHT)
 
     # ── KPI TABLE SECTION ─────────────────────────────────────────────────────
@@ -211,7 +211,7 @@ def add_account_metric_slide(prs, rec: dict, week_label: str, quarter_label: str
                   fill_rgb=NAVY, line_rgb=None)
         _add_text_box(slide, cx + Inches(0.05), row_y + Inches(0.03),
                       col_w - Inches(0.14), Inches(0.22),
-                      hdr, font_size=Pt(10), bold=True, color=WHITE,
+                      hdr, font_size=Pt(11), bold=True, color=WHITE,
                       align=PP_ALIGN.CENTER)
 
     # main metric values row
@@ -252,7 +252,7 @@ def add_account_metric_slide(prs, rec: dict, week_label: str, quarter_label: str
                   fill_rgb=fill_c, line_rgb=RGBColor(0xCC, 0xCC, 0xCC))
         _add_text_box(slide, cx + Inches(0.05), val_y + Inches(0.08),
                       col_w - Inches(0.14), val_h - Inches(0.1),
-                      v, font_size=Pt(20), bold=True, color=val_col,
+                      v, font_size=Pt(22), bold=True, color=val_col,
                       align=PP_ALIGN.CENTER)
 
     # ── BPM ROW ───────────────────────────────────────────────────────────────
@@ -303,7 +303,7 @@ def add_account_metric_slide(prs, rec: dict, week_label: str, quarter_label: str
                   fill_rgb=fill_c, line_rgb=RGBColor(0xCC, 0xCC, 0xCC))
         _add_text_box(slide, cx + Inches(0.05), bpm_y + bpm_hdr_h + Inches(0.04),
                       col_w - Inches(0.14), bpm_val_h - Inches(0.04),
-                      v, font_size=Pt(15), bold=True, color=val_col,
+                      v, font_size=Pt(16), bold=True, color=val_col,
                       align=PP_ALIGN.CENTER)
 
     # ── REASON SECTION ────────────────────────────────────────────────────────

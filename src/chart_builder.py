@@ -38,20 +38,21 @@ def build_bar_chart(rec: dict, tmp_dir: str) -> str:
     """
     metric = rec['metric']
 
-    groups = ['Plan QTR', 'WK Plan', 'WK Act']
-    main_vals = [_chart_value(metric, rec.get('plan_qtr')), _chart_value(metric, rec.get('wk_plan')), _chart_value(metric, rec.get('wk_act'))]
-    bpm_vals  = [_chart_value(metric, rec.get('bpm_plan_qtr')), _chart_value(metric, rec.get('bpm_wk_plan')), _chart_value(metric, rec.get('bpm_wk_act'))]
+    groups = ['WK Plan', 'WK Act', 'BPM Plan', 'BPM Act']
+    main_vals = [_chart_value(metric, rec.get('wk_plan')), _chart_value(metric, rec.get('wk_act'))]
+    bpm_vals  = [_chart_value(metric, rec.get('bpm_wk_plan')), _chart_value(metric, rec.get('bpm_wk_act'))]
+    values = main_vals + bpm_vals
 
     x = np.arange(len(groups))
-    width = 0.35
+    width = 0.4
 
     fig, ax = plt.subplots(figsize=(6.2, 4.0))
     fig.patch.set_facecolor('white')
     fig.subplots_adjust(top=0.88, bottom=0.12, left=0.1, right=0.97)
 
-    bars1 = ax.bar(x - width/2, main_vals, width, label=metric,
+    bars1 = ax.bar(x[:2] - width/2, main_vals, width, label='WK',
                    color=[_bar_color(v) for v in main_vals], alpha=0.9, zorder=3)
-    bars2 = ax.bar(x + width/2, bpm_vals,  width, label=f'{metric} BPM',
+    bars2 = ax.bar(x[2:] - width/2, bpm_vals, width, label='BPM',
                    color=[_bar_color(v) for v in bpm_vals], alpha=0.55, zorder=3)
 
     # value labels on bars
@@ -65,9 +66,9 @@ def build_bar_chart(rec: dict, tmp_dir: str) -> str:
                 color='#222222')
 
     ax.set_xticks(x)
-    ax.set_xticklabels(groups, fontsize=9)
-    ax.set_ylabel('Value', fontsize=8, color='#444444')
-    ax.set_title(f'{metric} — Plan vs Actual vs BPM', fontsize=10,
+    ax.set_xticklabels(groups, fontsize=10)
+    ax.set_ylabel('Value', fontsize=9, color='#444444')
+    ax.set_title(f'{metric} — WK Plan vs WK Act vs BPM', fontsize=12,
                  fontweight='bold', color=C_NAVY, pad=8)
     ax.axhline(0, color='#444444', linewidth=0.8, zorder=2)
     ax.grid(axis='y', linestyle='--', alpha=0.4, zorder=1)
