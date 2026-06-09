@@ -70,6 +70,15 @@ _SHEET_MAP = {
     },
 }
 
+KNOWN_ADH_NAMES = [
+    "Kumar", "Prachi", "Pradeep", "Himadri", "Ajit Katankot",
+    "Manu", "RK", "Manish", "VSV Ramesh", "LK", "Solomon",
+]
+KNOWN_ADH_MAP = {
+    _normalize_column_label(name): name
+    for name in KNOWN_ADH_NAMES
+}
+
 
 def _text(val):
     """Clean text value."""
@@ -99,6 +108,10 @@ def _match_column_name(raw_label: str, known_labels: dict) -> str | None:
     if 'delta' in tokens and 'reason' in tokens:
         return 'delta_reason'
     if ('adh' in tokens
+            or ('delivery' in tokens and 'head' in tokens)
+            or ('account' in tokens and 'head' in tokens)
+            or 'accountdeliveryhead' in normalized
+            or 'deliveryhead' in normalized
             or 'column1' in tokens
             or ('column' in tokens and ('1' in tokens or 'one' in tokens))
             or ('col' in tokens and '1' in tokens)):
@@ -131,6 +144,21 @@ def _match_column_name(raw_label: str, known_labels: dict) -> str | None:
     if 'act' in tokens or 'actual' in tokens:
         return 'wk_act'
     return None
+
+
+def _normalize_adh_value(value):
+    if value is None:
+        return ''
+    text = _text(value)
+    if not text:
+        return ''
+    normalized = _normalize_column_label(text)
+    if normalized in KNOWN_ADH_MAP:
+        return KNOWN_ADH_MAP[normalized]
+    for known_norm, canonical in KNOWN_ADH_MAP.items():
+        if known_norm in normalized or normalized in known_norm:
+            return canonical
+    return text
 
 
 def _clean_number(val):
@@ -253,7 +281,7 @@ def load_metric(filepath: str, metric: str, accounts_filter) -> list[dict]:
         rec = {
             'account':       _text(row.get('account')),
             'metric':        metric,
-            'adh':           _text(row.get('adh')),
+            'adh':           _normalize_adh_value(row.get('adh')),
             'plan_qtr':      plan_qtr,
             'wk_plan':       wk_plan,
             'wk_act':        wk_act,
@@ -358,3 +386,13 @@ def get_all_data(filepath: str, metrics: list, accounts_filter) -> dict:
             result['Netadd'] = load_metric(filepath, 'Netadd', accounts_filter)
 
     return result
+
+
+def group_records_by_adh(records: list[dict]) -> dict[str, list[dict]]:
+    adh_groups = {}
+    for rec in records:
+        adh = (rec.get('adh') or '').strip()
+        if not adh:
+            continue
+        adh_groups.setdefault(adh, []).append(rec)
+    return adh_groups
