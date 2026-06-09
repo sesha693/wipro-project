@@ -177,8 +177,9 @@ def add_account_metric_slide(prs, rec: dict, week_label: str, quarter_label: str
     account = rec['account']
 
     # ── HEADER BAR ────────────────────────────────────────────────────────────
-    hdr_h = Inches(0.82)
+    hdr_h = Inches(0.88)
     _add_rect(slide, 0, 0, SLIDE_W, hdr_h, fill_rgb=NAVY)
+    _add_rect(slide, 0, hdr_h, SLIDE_W, SLIDE_H - hdr_h, fill_rgb=RGBColor(0xF6, 0xF8, 0xFB), line_rgb=None)
 
     # metric badge
     badge_w = Inches(1.3)
@@ -198,9 +199,9 @@ def add_account_metric_slide(prs, rec: dict, week_label: str, quarter_label: str
                   align=PP_ALIGN.RIGHT)
 
     # ── KPI TABLE SECTION ─────────────────────────────────────────────────────
-    row_y = Inches(0.87)
+    row_y = Inches(1.08)
     row_h = Inches(0.72)
-    pad   = Inches(0.12)
+    pad   = Inches(0.15)
     col_w = (SLIDE_W - 2 * pad) / 5
 
     # column headers row
@@ -256,10 +257,10 @@ def add_account_metric_slide(prs, rec: dict, week_label: str, quarter_label: str
                       align=PP_ALIGN.CENTER)
 
     # ── BPM ROW ───────────────────────────────────────────────────────────────
-    bpm_y = val_y + val_h + Inches(0.06)
-    bpm_h = Inches(0.58)
+    bpm_y = val_y + val_h + Inches(0.10)
+    bpm_h = Inches(0.62)
 
-    bpm_hdr_h = Inches(0.22)
+    bpm_hdr_h = Inches(0.24)
     bpm_val_h = bpm_h - bpm_hdr_h
 
     bpm_hdrs = ['BPM Plan QTR', 'BPM WK Plan', 'BPM WK Act', 'BPM Gap', 'BPM WoW']
@@ -307,9 +308,9 @@ def add_account_metric_slide(prs, rec: dict, week_label: str, quarter_label: str
                       align=PP_ALIGN.CENTER)
 
     # ── REASON SECTION ────────────────────────────────────────────────────────
-    reason_y = bpm_y + bpm_h + Inches(0.1)
+    reason_y = bpm_y + bpm_h + Inches(0.14)
     reason_h = Inches(0.5)
-    rp_y     = reason_y + reason_h + Inches(0.04)
+    rp_y     = reason_y + reason_h + Inches(0.06)
     rp_h     = Inches(0.5)
 
     # Delta reason
@@ -404,8 +405,9 @@ def add_metric_overview_slide(prs, records: list, metric: str,
     """One slide showing all accounts for a single metric."""
     slide = _blank_slide(prs)
 
-    # header
-    hdr_h = Inches(0.75)
+    # subtle background
+    hdr_h = Inches(0.78)
+    _add_rect(slide, 0, 0, SLIDE_W, SLIDE_H, fill_rgb=RGBColor(0xF6, 0xF8, 0xFB), line_rgb=None)
     _add_rect(slide, 0, 0, SLIDE_W, hdr_h, fill_rgb=NAVY)
     _add_text_box(slide, Inches(0.2), Inches(0.12), Inches(9), Inches(0.55),
                   f'{metric} — All Accounts',
@@ -423,8 +425,8 @@ def add_metric_overview_slide(prs, records: list, metric: str,
     gap_cols = {4: 'gap', 8: 'bpm_gap'}
     wow_cols  = {5: 'wow', 9: 'bpm_wow'}
 
-    tbl_y = Inches(0.82)
-    tbl_h = SLIDE_H - tbl_y - Inches(0.1)
+    tbl_y = Inches(0.92)
+    tbl_h = SLIDE_H - tbl_y - Inches(0.14)
 
     if chart_path:
         # table on left 55%, chart on right 45%
@@ -443,10 +445,6 @@ def add_metric_overview_slide(prs, records: list, metric: str,
     hdr_row_h  = Inches(0.38)
 
     # header row
-    for ci, hdr in enumerate(col_hdrs):
-        cw = acct_w if ci == 0 else rest_w
-        cx = Inches(0.1) + (acct_w if ci > 0 else 0) + (ci - 1) * rest_w if ci > 0 else Inches(0.1)
-        # simpler: accumulate x
     cx = Inches(0.1)
     for ci, hdr in enumerate(col_hdrs):
         cw = acct_w if ci == 0 else rest_w
@@ -502,6 +500,7 @@ def add_summary_slide(prs, all_data: dict, week_label: str, quarter_label: str):
     slide = _blank_slide(prs)
 
     hdr_h = Inches(0.75)
+    _add_rect(slide, 0, 0, SLIDE_W, SLIDE_H, fill_rgb=RGBColor(0xF6, 0xF8, 0xFB), line_rgb=None)
     _add_rect(slide, 0, 0, SLIDE_W, hdr_h, fill_rgb=NAVY)
     _add_text_box(slide, Inches(0.2), Inches(0.12), Inches(9), Inches(0.55),
                   'Summary — All Metrics',

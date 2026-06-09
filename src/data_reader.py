@@ -112,7 +112,9 @@ def _match_column_name(raw_label: str, known_labels: dict) -> str | None:
         return 'wow'
     if 'prev' in tokens and 'gap' in tokens:
         return 'prev_gap'
-    if 'plan' in tokens and any(x in tokens for x in ('qtr', 'q1', 'qtd', 'quarter')):
+    if 'plan' in tokens and 'qtd' in tokens:
+        return 'wk_plan'
+    if 'plan' in tokens and any(x in tokens for x in ('qtr', 'q1', 'quarter')):
         return 'plan_qtr'
     if 'plan' in tokens:
         return 'wk_plan'
@@ -161,6 +163,33 @@ def _raw(val):
     return _clean_number(val)
 
 
+def _positive_if_rd(metric: str, val):
+    if metric == 'RD' and val is not None:
+        try:
+            return abs(float(val))
+        except (TypeError, ValueError):
+            return val
+    return val
+
+
+def _invert_if_rd(metric: str, val):
+    if metric == 'RD' and val is not None:
+        try:
+            return -float(val)
+        except (TypeError, ValueError):
+            return val
+    return val
+
+
+def _calc_gap(plan, act):
+    if plan is None or act is None:
+        return None
+    try:
+        return float(act) - float(plan)
+    except (TypeError, ValueError):
+        return None
+
+
 def load_metric(filepath: str, metric: str, accounts_filter) -> list[dict]:
     """Load one metric sheet and return a list of account dicts."""
     cfg = _SHEET_MAP[metric]
@@ -200,34 +229,106 @@ def load_metric(filepath: str, metric: str, accounts_filter) -> list[dict]:
 
     records = []
     for _, row in df.iterrows():
+        plan_qtr = _positive_if_rd(metric, _raw(row.get('plan_qtr')))
+        wk_plan = _positive_if_rd(metric, _raw(row.get('wk_plan')))
+        wk_act = _positive_if_rd(metric, _raw(row.get('wk_act')))
+        gap = _calc_gap(wk_plan, wk_act) if metric == 'RD' else _raw(row.get('gap'))
+        prev_gap = _positive_if_rd(metric, _raw(row.get('prev_gap')))
+        wow = _invert_if_rd(metric, _raw(row.get('wow')))
+        bpm_plan_qtr = _positive_if_rd(metric, _raw(row.get('bpm_plan_qtr')))
+        bpm_wk_plan = _positive_if_rd(metric, _raw(row.get('bpm_wk_plan')))
+        bpm_wk_act = _positive_if_rd(metric, _raw(row.get('bpm_wk_act')))
+        bpm_gap = _calc_gap(bpm_wk_plan, bpm_wk_act) if metric == 'RD' else _raw(row.get('bpm_gap'))
+        bpm_prev_gap = _positive_if_rd(metric, _raw(row.get('bpm_prev_gap')))
+        bpm_wow = _invert_if_rd(metric, _raw(row.get('bpm_wow')))
+
         rec = {
             'account':       _text(row.get('account')),
             'metric':        metric,
-            'plan_qtr':      _raw(row.get('plan_qtr')),
-            'wk_plan':       _raw(row.get('wk_plan')),
-            'wk_act':        _raw(row.get('wk_act')),
-            'gap':           _raw(row.get('gap')),
-            'prev_gap':      _raw(row.get('prev_gap')),
-            'wow':           _raw(row.get('wow')),
-            'bpm_plan_qtr':  _raw(row.get('bpm_plan_qtr')),
-            'bpm_wk_plan':   _raw(row.get('bpm_wk_plan')),
-            'bpm_wk_act':    _raw(row.get('bpm_wk_act')),
-            'bpm_gap':       _raw(row.get('bpm_gap')),
-            'bpm_prev_gap':  _raw(row.get('bpm_prev_gap')),
-            'bpm_wow':       _raw(row.get('bpm_wow')),
+            'plan_qtr':      plan_qtr,
+            'wk_plan':       wk_plan,
+            'wk_act':        wk_act,
+            'gap':           gap,
+            'prev_gap':      prev_gap,
+            'wow':           wow,
+            'bpm_plan_qtr':  bpm_plan_qtr,
+            'bpm_wk_plan':   bpm_wk_plan,
+            'bpm_wk_act':    bpm_wk_act,
+            'bpm_gap':       bpm_gap,
+            'bpm_prev_gap':  bpm_prev_gap,
+            'bpm_wow':       bpm_wow,
             'delta_reason':  _text(row.get('delta_reason')),
             'recovery_plan': _text(row.get('recovery_plan')),
             # formatted display strings
-            'fmt_plan_qtr':     _fmt(row.get('plan_qtr')),
-            'fmt_wk_plan':      _fmt(row.get('wk_plan')),
-            'fmt_wk_act':       _fmt(row.get('wk_act')),
-            'fmt_gap':          _fmt(row.get('gap')),
-            'fmt_wow':          _fmt(row.get('wow')),
-            'fmt_bpm_plan_qtr': _fmt(row.get('bpm_plan_qtr')),
-            'fmt_bpm_wk_plan':  _fmt(row.get('bpm_wk_plan')),
-            'fmt_bpm_wk_act':   _fmt(row.get('bpm_wk_act')),
-            'fmt_bpm_gap':      _fmt(row.get('bpm_gap')),
-            'fmt_bpm_wow':      _fmt(row.get('bpm_wow')),
+            'fmt_plan_qtr':     _fmt(plan_qtr),
+            'fmt_wk_plan':      _fmt(wk_plan),
+            'fmt_wk_act':       _fmt(wk_act),
+            'fmt_gap':          _fmt(gap),
+            'fmt_wow':          _fmt(wow),
+            'fmt_bpm_plan_qtr': _fmt(bpm_plan_qtr),
+            'fmt_bpm_wk_plan':  _fmt(bpm_wk_plan),
+            'fmt_bpm_wk_act':   _fmt(bpm_wk_act),
+            'fmt_bpm_gap':      _fmt(bpm_gap),
+            'fmt_bpm_wow':      _fmt(bpm_wow),
+        }
+        records.append(rec)
+    return records
+
+
+def _derive_netadd_records(ru_records: list[dict], rd_records: list[dict]) -> list[dict]:
+    ru_map = {r['account'].strip().upper(): r for r in ru_records}
+    rd_map = {r['account'].strip().upper(): r for r in rd_records}
+    account_keys = sorted(set(ru_map) | set(rd_map))
+    records = []
+
+    def _safe(v):
+        return 0.0 if v is None else float(v)
+
+    for key in account_keys:
+        ru = ru_map.get(key, {})
+        rd = rd_map.get(key, {})
+        account = ru.get('account') or rd.get('account') or key
+
+        plan_qtr = _safe(ru.get('plan_qtr')) - _safe(rd.get('plan_qtr'))
+        wk_plan = _safe(ru.get('wk_plan')) - _safe(rd.get('wk_plan'))
+        wk_act = _safe(ru.get('wk_act')) - _safe(rd.get('wk_act'))
+        gap = wk_act - wk_plan
+        prev_gap = _safe(ru.get('prev_gap')) - _safe(rd.get('prev_gap'))
+        wow = _safe(ru.get('wow')) - _safe(rd.get('wow'))
+        bpm_plan_qtr = _safe(ru.get('bpm_plan_qtr')) - _safe(rd.get('bpm_plan_qtr'))
+        bpm_wk_plan = _safe(ru.get('bpm_wk_plan')) - _safe(rd.get('bpm_wk_plan'))
+        bpm_wk_act = _safe(ru.get('bpm_wk_act')) - _safe(rd.get('bpm_wk_act'))
+        bpm_gap = bpm_wk_act - bpm_wk_plan
+        bpm_prev_gap = _safe(ru.get('bpm_prev_gap')) - _safe(rd.get('bpm_prev_gap'))
+        bpm_wow = _safe(ru.get('bpm_wow')) - _safe(rd.get('bpm_wow'))
+
+        rec = {
+            'account': account,
+            'metric': 'Netadd',
+            'plan_qtr': plan_qtr,
+            'wk_plan': wk_plan,
+            'wk_act': wk_act,
+            'gap': gap,
+            'prev_gap': prev_gap,
+            'wow': wow,
+            'bpm_plan_qtr': bpm_plan_qtr,
+            'bpm_wk_plan': bpm_wk_plan,
+            'bpm_wk_act': bpm_wk_act,
+            'bpm_gap': bpm_gap,
+            'bpm_prev_gap': bpm_prev_gap,
+            'bpm_wow': bpm_wow,
+            'delta_reason': ru.get('delta_reason') or rd.get('delta_reason') or '',
+            'recovery_plan': '',
+            'fmt_plan_qtr': _fmt(plan_qtr),
+            'fmt_wk_plan': _fmt(wk_plan),
+            'fmt_wk_act': _fmt(wk_act),
+            'fmt_gap': _fmt(gap),
+            'fmt_wow': _fmt(wow),
+            'fmt_bpm_plan_qtr': _fmt(bpm_plan_qtr),
+            'fmt_bpm_wk_plan': _fmt(bpm_wk_plan),
+            'fmt_bpm_wk_act': _fmt(bpm_wk_act),
+            'fmt_bpm_gap': _fmt(bpm_gap),
+            'fmt_bpm_wow': _fmt(bpm_wow),
         }
         records.append(rec)
     return records
@@ -236,5 +337,14 @@ def load_metric(filepath: str, metric: str, accounts_filter) -> list[dict]:
 def get_all_data(filepath: str, metrics: list, accounts_filter) -> dict:
     result = {}
     for m in metrics:
+        if m == 'Netadd':
+            continue
         result[m] = load_metric(filepath, m, accounts_filter)
+
+    if 'Netadd' in metrics:
+        if 'RU' in result and 'RD' in result:
+            result['Netadd'] = _derive_netadd_records(result['RU'], result['RD'])
+        else:
+            result['Netadd'] = load_metric(filepath, 'Netadd', accounts_filter)
+
     return result

@@ -10,7 +10,7 @@ import streamlit as st
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).parent))
-from src.data_reader   import get_all_data, load_metric
+from src.data_reader   import get_all_data
 from src.chart_builder import build_bar_chart, build_overview_chart, build_group_comparison_chart
 from src.slide_builder import (
     create_presentation, add_title_slide, add_account_metric_slide,
@@ -179,8 +179,8 @@ if uploaded and selected_metrics:
         tmp_xlsx = tmp.name
 
     try:
+        all_data = get_all_data(tmp_xlsx, selected_metrics, 'all')
         for m in selected_metrics:
-            all_data[m] = load_metric(tmp_xlsx, m, 'all')
             all_accounts_by_metric[m] = sorted({r['account'] for r in all_data[m]})
         data_loaded = True
     except Exception as e:
