@@ -345,19 +345,6 @@ if data_loaded:
             st.session_state.groups.append({"name": "", "accounts": []})
             st.rerun()
 
-        st.markdown("---")
-        st.markdown("### 🧑‍💼 ADH Slides")
-        st.caption("Select Account Delivery Heads to generate aggregated RU, RD and Netadd slides for all accounts under each ADH.")
-        selected_adhs = st.multiselect(
-            "Select ADHs",
-            options=all_adhs,
-            default=[],
-            key="selected_adhs",
-            help="Each selected ADH will generate one aggregated slide per selected metric.",
-        )
-        if not all_adhs:
-            st.info("No ADH values were detected in the uploaded workbook.")
-
     groups = [g for g in st.session_state.groups if g['accounts']]
 
 
