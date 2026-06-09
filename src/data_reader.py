@@ -165,6 +165,25 @@ def _transpose_sheet_if_needed(candidate: pd.DataFrame, normalized_map: dict) ->
     return None
 
 
+def _is_metric_label(value) -> bool:
+    if value is None:
+        return False
+    text = str(value).strip().lower()
+    return any(keyword in text for keyword in (
+        'plan', 'act', 'gap', 'wow', 'bpm', 'rd', 'ru', 'net',
+        'qtr', 'qtd', 'wk', 'week', 'prev', 'delta', 'recovery'
+    ))
+
+
+def _looks_like_transposed_account_column(series: pd.Series) -> bool:
+    non_null = series.dropna().astype(str).str.strip()
+    if len(non_null) == 0:
+        return False
+    sample = non_null.head(12)
+    metric_label_count = sum(_is_metric_label(val) for val in sample)
+    return metric_label_count >= max(3, len(sample) * 0.75)
+
+
 def _clean_number(val):
     if val is None or (isinstance(val, float) and pd.isna(val)):
         return None
@@ -227,7 +246,7 @@ def load_metric(filepath: str, metric: str, accounts_filter) -> list[dict]:
             if mapped:
                 rename_map[col] = mapped
         candidate = candidate.rename(columns=rename_map)
-        if 'account' in candidate.columns and candidate['account'].notna().any():
+        if 'account' in candidate.columns and candidate['account'].notna().any() and not _looks_like_transposed_account_column(candidate['account']):
             df = candidate
             break
 
