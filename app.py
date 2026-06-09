@@ -250,8 +250,13 @@ also_individual   = True
 
 if data_loaded:
     all_union = sorted(set(a for accs in all_accounts_by_metric.values() for a in accs))
-
-    # initialise session state
+    if selected_adhs:
+        all_union = sorted({
+            r['account']
+            for recs in all_data.values()
+            for r in recs
+            if (r.get('adh') or '') in selected_adhs
+        })
     if 'groups' not in st.session_state:
         st.session_state.groups = []
 
@@ -268,6 +273,7 @@ if data_loaded:
                 options=all_union,
                 default=all_union[:5],
             )
+            selected_accounts = [a for a in selected_accounts if a in all_union]
             if not selected_accounts:
                 selected_accounts = "all"
         else:
@@ -278,6 +284,20 @@ if data_loaded:
                 "Also generate individual slides for grouped accounts",
                 value=True,
             )
+
+        st.markdown("---")
+
+        selected_adhs = st.multiselect(
+            "ADH Groups",
+            options=all_adhs,
+            default=[],
+            key="selected_adhs",
+            help="Select one or more ADHs and the preview will show only accounts under those ADHs.",
+        )
+        if selected_adhs:
+            st.caption("Only accounts belonging to the selected ADH groups are shown and ADH slides will be generated for those groups.")
+        else:
+            st.caption("No ADH group selected: all accounts will be shown in preview and only standard account/group slides will be generated.")
 
         st.markdown("---")
 
@@ -351,6 +371,8 @@ if data_loaded:
         for tab, metric in zip(tabs, selected_metrics):
             with tab:
                 records = all_data[metric]
+                if selected_adhs:
+                    records = [r for r in records if (r.get('adh') or '') in selected_adhs]
                 if selected_accounts != "all":
                     upper = [a.upper() for a in selected_accounts]
                     records = [r for r in records if r['account'].upper() in upper]
@@ -449,6 +471,8 @@ else:
             filtered = {}
             for m in selected_metrics:
                 recs = all_data[m]
+                if selected_adhs:
+                    recs = [r for r in recs if (r.get('adh') or '') in selected_adhs]
                 if selected_accounts != "all":
                     upper = [a.upper() for a in selected_accounts]
                     recs = [r for r in recs if r['account'].upper() in upper]
@@ -473,7 +497,7 @@ else:
             total_steps = max(indiv_steps + group_steps + adh_steps, 1)
             step = 0
 
-            # ── ADH aggregated slides ─────────────────────────────────────────
+            # ── selected ADH slides ──────────────────────────────────────────────
             for metric in selected_metrics:
                 for adh in selected_adhs:
                     adh_recs = [r for r in filtered[metric] if (r.get('adh') or '') == adh]
@@ -481,16 +505,16 @@ else:
                         step += 1
                         continue
                     status.markdown(
-                        f"Building **{adh}** ADH summary — {metric}..."
+                        f"Building **{adh}** — {metric} group slide..."
                     )
-                    adh_rec = _build_adh_summary_record(adh, metric, adh_recs)
                     adh_chart = None
                     if chart_type in ("bar", "all"):
-                        adh_chart = build_bar_chart(adh_rec, chart_tmp)
-                    add_account_metric_slide(
-                        prs, adh_rec, week_label, quarter_label,
-                        chart_type=chart_type,
-                        bar_path=adh_chart,
+                        adh_chart = build_group_comparison_chart(adh_recs, metric, chart_tmp)
+                    add_grouped_accounts_slide(
+                        prs, adh_recs, metric,
+                        week_label, quarter_label,
+                        chart_path=adh_chart,
+                        group_name=adh,
                     )
                     step += 1
                     progress.progress(min(step / total_steps, 1.0),
