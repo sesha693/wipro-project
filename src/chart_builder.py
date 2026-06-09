@@ -1,4 +1,5 @@
 import os
+import re
 import tempfile
 import matplotlib
 matplotlib.use('Agg')
@@ -29,6 +30,11 @@ def _chart_value(metric: str, value):
     except (TypeError, ValueError):
         return 0
     return abs(v) if metric == 'RD' else v
+
+
+def _sanitize_filename(name: str) -> str:
+    safe = re.sub(r'[^A-Za-z0-9_.-]+', '_', str(name).strip())
+    return safe[:120] or 'chart'
 
 
 def build_bar_chart(rec: dict, tmp_dir: str) -> str:
@@ -82,7 +88,8 @@ def build_bar_chart(rec: dict, tmp_dir: str) -> str:
     ax.legend(handles=[patch1, patch2], fontsize=7.5, loc='best',
               framealpha=0.8, edgecolor='#CCCCCC')
 
-    path = os.path.join(tmp_dir, f'{rec["account"]}_{metric}_bar.png')
+    account_safe = _sanitize_filename(rec.get('account', 'account'))
+    path = os.path.join(tmp_dir, f'{account_safe}_{metric}_bar.png')
     fig.savefig(path, dpi=140, bbox_inches=None)
     plt.close(fig)
     return path
@@ -119,7 +126,8 @@ def build_gap_trend_chart(rec: dict, tmp_dir: str) -> str:
     for spine in ax.spines.values():
         spine.set_edgecolor('#CCCCCC')
 
-    path = os.path.join(tmp_dir, f'{rec["account"]}_{metric}_trend.png')
+    account_safe = _sanitize_filename(rec.get('account', 'account'))
+    path = os.path.join(tmp_dir, f'{account_safe}_{metric}_trend.png')
     fig.savefig(path, dpi=140, bbox_inches=None)
     plt.close(fig)
     return path
@@ -165,7 +173,7 @@ def build_group_comparison_chart(records: list, metric: str, tmp_dir: str) -> st
     for spine in ax.spines.values():
         spine.set_edgecolor('#CCCCCC')
 
-    label = '_'.join(r['account'][:6] for r in records[:3])
+    label = '_'.join(_sanitize_filename(r['account'][:6]) for r in records[:3])
     path = os.path.join(tmp_dir, f'group_{metric}_{label}.png')
     fig.savefig(path, dpi=140, bbox_inches=None)
     plt.close(fig)

@@ -74,6 +74,14 @@ KNOWN_ADH_NAMES = [
     "Kumar", "Prachi", "Pradeep", "Himadri", "Ajit Katankot",
     "Manu", "RK", "Manish", "VSV Ramesh", "LK", "Solomon",
 ]
+
+def _normalize_column_label(value: str) -> str:
+    if value is None:
+        return ''
+    text = str(value).strip().lower()
+    text = ''.join(ch if ch.isalnum() else ' ' for ch in text)
+    return ' '.join(text.split())
+
 KNOWN_ADH_MAP = {
     _normalize_column_label(name): name
     for name in KNOWN_ADH_NAMES
@@ -85,14 +93,6 @@ def _text(val):
     if val is None or (isinstance(val, float) and pd.isna(val)):
         return ''
     return str(val).strip()
-
-
-def _normalize_column_label(value: str) -> str:
-    if value is None:
-        return ''
-    text = str(value).strip().lower()
-    text = ''.join(ch if ch.isalnum() else ' ' for ch in text)
-    return ' '.join(text.split())
 
 
 def _match_column_name(raw_label: str, known_labels: dict) -> str | None:
