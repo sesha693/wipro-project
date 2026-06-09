@@ -239,10 +239,11 @@ if uploaded and selected_metrics:
     except Exception as e:
         st.error(f"❌ Error reading file: {e}")
         st.stop()
-selected_adhs = []
 all_adhs = []
+selected_adhs = []
 if data_loaded:
     all_adhs = sorted({r.get('adh', '').strip() for recs in all_data.values() for r in recs if r.get('adh') and str(r.get('adh')).strip()})
+    selected_adhs = st.session_state.get('selected_adhs', [])
 # ── account groups ────────────────────────────────────────────────────────────
 selected_accounts = "all"
 groups            = []          # list of {"name": str, "accounts": [...]}
