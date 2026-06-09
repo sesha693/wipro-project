@@ -61,7 +61,7 @@ def build_bar_chart(rec: dict, tmp_dir: str) -> str:
         va = 'bottom' if h >= 0 else 'top'
         offset = 0.5 if h >= 0 else -0.5
         ax.text(bar.get_x() + bar.get_width()/2, h + offset,
-                f'{h:.1f}' if h != int(h) else str(int(h)),
+                str(int(round(h))),
                 ha='center', va=va, fontsize=7.5, fontweight='bold',
                 color='#222222')
 
@@ -151,7 +151,7 @@ def build_group_comparison_chart(records: list, metric: str, tmp_dir: str) -> st
         va = 'bottom' if h >= 0 else 'top'
         offset = 0.3 if h >= 0 else -0.3
         ax.text(bar.get_x() + bar.get_width() / 2, h + offset,
-                f'{h:.1f}' if h != int(h) else str(int(h)),
+                str(int(round(h))),
                 ha='center', va=va, fontsize=7, fontweight='bold', color='#222222')
 
     ax.set_xticks(x)

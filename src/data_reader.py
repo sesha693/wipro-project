@@ -143,16 +143,14 @@ def _clean_number(val):
 
 
 def _fmt(val, decimals=1):
-    """Format a numeric value, returning '—' for missing data."""
+    """Format a numeric value as a whole number, returning '—' for missing data."""
     if val is None or (isinstance(val, float) and pd.isna(val)):
         return '—'
     try:
         f = _clean_number(val)
         if f is None:
             return '—'
-        if f == int(f):
-            return str(int(f))
-        return f'{f:.{decimals}f}'
+        return str(int(round(f)))
     except (TypeError, ValueError):
         text = str(val).strip()
         return text if text else '—'

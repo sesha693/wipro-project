@@ -43,7 +43,7 @@ def _wow_label(val):
         return '—'
     arrow = '▲' if val > 0 else '▼'
     sign  = '+' if val > 0 else ''
-    num   = int(val) if val == int(val) else f'{val:.1f}'
+    num   = str(int(round(val)))
     return f'{arrow} {sign}{num}'
 
 
@@ -536,7 +536,7 @@ def add_summary_slide(prs, all_data: dict, week_label: str, quarter_label: str):
         def _fmt_s(v):
             if v is None:
                 return '—'
-            return str(int(v)) if v == int(v) else f'{v:.1f}'
+            return str(int(round(v)))
 
         def _first_text(key):
             for r in records:
