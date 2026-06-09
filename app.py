@@ -186,8 +186,22 @@ if uploaded and selected_metrics:
     except Exception as e:
         st.error(f"❌ Error reading file: {e}")
         st.stop()
-
-
+selected_adh = "All ADHs"
+if data_loaded:
+    all_adhs = sorted({r.get('adh', '') for recs in all_data.values() for r in recs if r.get('adh')})
+    adh_options = ["All ADHs"] + all_adhs
+    if 'selected_adh' not in st.session_state:
+        st.session_state.selected_adh = "All ADHs"
+    with st.sidebar:
+        selected_adh = st.selectbox(
+            "ADH Filter",
+            options=adh_options,
+            index=adh_options.index(st.session_state.selected_adh) if st.session_state.selected_adh in adh_options else 0,
+            key="selected_adh",
+            help="Filter accounts and generated slides by ADH.",
+        )
+else:
+    selected_adh = "All ADHs"
 # ── account groups ────────────────────────────────────────────────────────────
 selected_accounts = "all"
 groups            = []          # list of {"name": str, "accounts": [...]}
@@ -283,6 +297,8 @@ if data_loaded:
         for tab, metric in zip(tabs, selected_metrics):
             with tab:
                 records = all_data[metric]
+                if selected_adh != "All ADHs":
+                    records = [r for r in records if (r.get('adh') or '') == selected_adh]
                 if selected_accounts != "all":
                     upper = [a.upper() for a in selected_accounts]
                     records = [r for r in records if r['account'].upper() in upper]
@@ -311,6 +327,7 @@ if data_loaded:
                     bpm_gap_v = r['bpm_gap']
                     rows.append({
                         "Account":      r['account'],
+                        "ADH":          r.get('adh', ''),
                         "Plan QTR":     r['fmt_plan_qtr'],
                         "WK Plan":      r['fmt_wk_plan'],
                         "WK Act":       r['fmt_wk_act'],
@@ -382,6 +399,8 @@ else:
                 if selected_accounts != "all":
                     upper = [a.upper() for a in selected_accounts]
                     recs  = [r for r in recs if r['account'].upper() in upper]
+                if selected_adh != "All ADHs":
+                    recs = [r for r in recs if (r.get('adh') or '') == selected_adh]
                 filtered[m] = recs
 
             prs = create_presentation()
@@ -395,12 +414,36 @@ else:
                 for a in g['accounts']
             }
             group_steps = len(groups) * len(selected_metrics)
+            adh_overview_steps = len(selected_metrics) if selected_adh != "All ADHs" and layout != "per_metric" else 0
             indiv_steps = sum(
                 len(filtered[m]) if layout in ("per_account", "per_account_combined") else 1
                 for m in selected_metrics
             )
-            total_steps = max(indiv_steps + group_steps, 1)
+            total_steps = max(indiv_steps + group_steps + adh_overview_steps, 1)
             step = 0
+
+            # ── ADH overview slides for selected ADH when not already in per_metric layout ─────────────
+            if selected_adh != "All ADHs" and layout != "per_metric":
+                for metric in selected_metrics:
+                    adh_recs = [r for r in filtered[metric] if (r.get('adh') or '') == selected_adh]
+                    if not adh_recs:
+                        step += 1
+                        continue
+                    status.markdown(
+                        f"Building **{selected_adh}** ADH overview — {metric}..."
+                    )
+                    adh_chart = None
+                    if chart_type in ("bar", "all"):
+                        adh_chart = build_overview_chart(adh_recs, metric, chart_tmp)
+                    add_metric_overview_slide(
+                        prs, adh_recs, metric,
+                        week_label, quarter_label,
+                        chart_path=adh_chart,
+                        title_prefix=selected_adh,
+                    )
+                    step += 1
+                    progress.progress(min(step / total_steps, 1.0),
+                                      text=f"{selected_adh} — {metric}")
 
             # ── named group slides (RU → RD → Netadd per group) ──────────────
             for grp in groups:

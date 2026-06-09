@@ -20,6 +20,7 @@ _SHEET_MAP = {
             'WOW BPM':           'bpm_wow',
             'Delta Reason':      'delta_reason',
             'Recovery Plan':     'recovery_plan',
+            'ADH':               'adh',
         },
     },
     'RD': {
@@ -40,6 +41,8 @@ _SHEET_MAP = {
             'WOW BPM':            'bpm_wow',
             'Delta Reason':       'delta_reason',
             'Recovery Plan':      'recovery_plan',
+            'Column1':            'adh',
+            'Column 1':           'adh',
         },
     },
     'Netadd': {
@@ -61,6 +64,8 @@ _SHEET_MAP = {
             'WOW BPM':             'bpm_wow',
             'Delta Reason':        'delta_reason',
             'Recovery Plan':       'recovery_plan',
+            'Column1':             'adh',
+            'Column 1':            'adh',
         },
     },
 }
@@ -93,6 +98,11 @@ def _match_column_name(raw_label: str, known_labels: dict) -> str | None:
         return 'recovery_plan'
     if 'delta' in tokens and 'reason' in tokens:
         return 'delta_reason'
+    if ('adh' in tokens
+            or 'column1' in tokens
+            or ('column' in tokens and ('1' in tokens or 'one' in tokens))
+            or ('col' in tokens and '1' in tokens)):
+        return 'adh'
     if 'bpm' in tokens:
         if 'gap' in tokens:
             return 'bpm_gap'
@@ -243,6 +253,7 @@ def load_metric(filepath: str, metric: str, accounts_filter) -> list[dict]:
         rec = {
             'account':       _text(row.get('account')),
             'metric':        metric,
+            'adh':           _text(row.get('adh')),
             'plan_qtr':      plan_qtr,
             'wk_plan':       wk_plan,
             'wk_act':        wk_act,
@@ -303,6 +314,7 @@ def _derive_netadd_records(ru_records: list[dict], rd_records: list[dict]) -> li
         rec = {
             'account': account,
             'metric': 'Netadd',
+            'adh': ru.get('adh') or rd.get('adh') or '',
             'plan_qtr': plan_qtr,
             'wk_plan': wk_plan,
             'wk_act': wk_act,

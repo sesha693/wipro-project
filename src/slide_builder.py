@@ -401,7 +401,8 @@ def add_account_metric_slide(prs, rec: dict, week_label: str, quarter_label: str
 
 def add_metric_overview_slide(prs, records: list, metric: str,
                                week_label: str, quarter_label: str,
-                               chart_path: str = None):
+                               chart_path: str = None,
+                               title_prefix: str | None = None):
     """One slide showing all accounts for a single metric."""
     slide = _blank_slide(prs)
 
@@ -409,8 +410,9 @@ def add_metric_overview_slide(prs, records: list, metric: str,
     hdr_h = Inches(0.78)
     _add_rect(slide, 0, 0, SLIDE_W, SLIDE_H, fill_rgb=RGBColor(0xF6, 0xF8, 0xFB), line_rgb=None)
     _add_rect(slide, 0, 0, SLIDE_W, hdr_h, fill_rgb=NAVY)
+    title_text = f'{metric} — {title_prefix}' if title_prefix else f'{metric} — All Accounts'
     _add_text_box(slide, Inches(0.2), Inches(0.12), Inches(9), Inches(0.55),
-                  f'{metric} — All Accounts',
+                  title_text,
                   font_size=Pt(22), bold=True, color=WHITE, align=PP_ALIGN.LEFT)
     _add_text_box(slide, Inches(10.5), Inches(0.18), Inches(2.7), Inches(0.42),
                   f'{week_label}  |  {quarter_label}',
