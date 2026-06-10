@@ -169,10 +169,12 @@ def add_title_slide(prs, week_label, quarter_label):
 
 def add_account_metric_slide(prs, rec: dict, week_label: str, quarter_label: str,
                               chart_type: str, bar_path: str = None,
-                              trend_path: str = None):
+                              trend_path: str = None, adh_name: str | None = None):
     slide = _blank_slide(prs)
     metric  = rec['metric']
     account = rec['account']
+    if isinstance(account, str) and len(account) > 90:
+        account = account[:87] + '…'
 
     # ── HEADER BAR ────────────────────────────────────────────────────────────
     hdr_h = Inches(0.88)
@@ -195,6 +197,11 @@ def add_account_metric_slide(prs, rec: dict, week_label: str, quarter_label: str
                   f'{week_label}  |  {quarter_label}',
                   font_size=Pt(12), bold=False, color=LBLUE,
                   align=PP_ALIGN.RIGHT)
+    if adh_name:
+        _add_text_box(slide, Inches(10.5), Inches(0.6), Inches(2.7), Inches(0.28),
+                      f'ADH: {adh_name}',
+                      font_size=Pt(10), bold=True, color=LBLUE,
+                      align=PP_ALIGN.RIGHT)
 
     # ── KPI TABLE SECTION ─────────────────────────────────────────────────────
     row_y = Inches(1.08)

@@ -52,9 +52,9 @@ def _fmt_number(value):
         return text if text else '—'
 
 
-def _build_adh_summary_record(adh_name: str, metric: str, records: list[dict]) -> dict:
+def _build_adh_summary_record(adh_name: str, metric: str, records: list[dict], account_label: str | None = None) -> dict:
     total = {
-        'account': f'{adh_name} (ADH)',
+        'account': account_label or f'{adh_name} (ADH)',
         'metric': metric,
         'adh': adh_name,
         'plan_qtr': 0.0,
@@ -429,13 +429,14 @@ if not data_loaded:
 elif not selected_metrics:
     st.warning("Select at least one metric in the sidebar.")
 else:
-    group_slides  = len(groups) * len(selected_metrics)
+    adh_only      = bool(selected_adhs)
+    group_slides  = 0 if adh_only else len(groups) * len(selected_metrics)
     adh_slides    = len(selected_adhs) * len(selected_metrics)
-    indiv_count   = sum(
+    indiv_count   = 0 if adh_only else sum(
         len(all_data[m]) if layout in ("per_account", "per_account_combined") else 1
         for m in selected_metrics
     )
-    n_slides_est  = indiv_count + group_slides + adh_slides + 2  # title + summary
+    n_slides_est  = adh_slides + group_slides + indiv_count + 2  # title + summary
 
     col_btn, col_info = st.columns([1, 3])
     with col_info:
@@ -470,15 +471,16 @@ else:
             add_title_slide(prs, week_label, quarter_label)
             add_summary_slide(prs, filtered, week_label, quarter_label)
 
+            adh_only = bool(selected_adhs)
             chart_tmp   = tempfile.mkdtemp(prefix="wipro_charts_")
             all_grouped_uppers = {
                 a.upper()
                 for g in groups
                 for a in g['accounts']
             }
-            group_steps = len(groups) * len(selected_metrics)
+            group_steps = 0 if adh_only else len(groups) * len(selected_metrics)
             adh_steps = len(selected_adhs) * len(selected_metrics)
-            indiv_steps = sum(
+            indiv_steps = 0 if adh_only else sum(
                 len(filtered[m]) if layout in ("per_account", "per_account_combined") else 1
                 for m in selected_metrics
             )
@@ -493,57 +495,65 @@ else:
                         step += 1
                         continue
                     status.markdown(
-                        f"Building **{adh}** — {metric} group slide..."
+                        f"Building **{adh}** — {metric} slide..."
                     )
-                    adh_chart = None
+                    account_names = sorted({r['account'] for r in adh_recs})
+                    account_label = ' · '.join(account_names)
+                    if len(account_label) > 120:
+                        account_label = account_label[:117] + '…'
+                    adh_summary = _build_adh_summary_record(adh, metric, adh_recs, account_label)
+
+                    bar_path = None
                     if chart_type in ("bar", "all"):
-                        adh_chart = build_group_comparison_chart(adh_recs, metric, chart_tmp)
-                    add_grouped_accounts_slide(
-                        prs, adh_recs, metric,
-                        week_label, quarter_label,
-                        chart_path=adh_chart,
-                        group_name=adh,
+                        bar_path = build_bar_chart(adh_summary, chart_tmp)
+                    add_account_metric_slide(
+                        prs, adh_summary, week_label, quarter_label,
+                        chart_type=chart_type,
+                        bar_path=bar_path,
+                        adh_name=adh,
                     )
                     step += 1
                     progress.progress(min(step / total_steps, 1.0),
                                       text=f"{adh} — {metric}")
 
             # ── named group slides (RU → RD → Netadd per group) ──────────────
-            for grp in groups:
-                grp_name   = grp['name'] or 'Group'
-                grp_upper  = [a.upper() for a in grp['accounts']]
+            if not selected_adhs:
+                for grp in groups:
+                    grp_name   = grp['name'] or 'Group'
+                    grp_upper  = [a.upper() for a in grp['accounts']]
 
-                for metric in selected_metrics:
-                    grp_recs = [r for r in filtered[metric]
-                                if r['account'].upper() in grp_upper]
-                    if not grp_recs:
+                    for metric in selected_metrics:
+                        grp_recs = [r for r in filtered[metric]
+                                    if r['account'].upper() in grp_upper]
+                        if not grp_recs:
+                            step += 1
+                            continue
+                        status.markdown(
+                            f"Building **{grp_name}** — {metric} "
+                            f"({len(grp_recs)} accounts)…"
+                        )
+                        grp_chart = build_group_comparison_chart(grp_recs, metric, chart_tmp)
+                        add_grouped_accounts_slide(
+                            prs, grp_recs, metric,
+                            week_label, quarter_label,
+                            chart_path=grp_chart,
+                            group_name=grp_name,
+                        )
                         step += 1
-                        continue
-                    status.markdown(
-                        f"Building **{grp_name}** — {metric} "
-                        f"({len(grp_recs)} accounts)…"
-                    )
-                    grp_chart = build_group_comparison_chart(grp_recs, metric, chart_tmp)
-                    add_grouped_accounts_slide(
-                        prs, grp_recs, metric,
-                        week_label, quarter_label,
-                        chart_path=grp_chart,
-                        group_name=grp_name,
-                    )
-                    step += 1
-                    progress.progress(min(step / total_steps, 1.0),
-                                      text=f"{grp_name} — {metric}")
+                        progress.progress(min(step / total_steps, 1.0),
+                                          text=f"{grp_name} — {metric}")
 
             # ── individual slides ─────────────────────────────────────────────
-            for metric in selected_metrics:
-                records = filtered[metric]
+            if not selected_adhs:
+                for metric in selected_metrics:
+                    records = filtered[metric]
 
-                # skip grouped accounts if "also individual" is off
-                if groups and not also_individual:
-                    indiv_recs = [r for r in records
-                                  if r['account'].upper() not in all_grouped_uppers]
-                else:
-                    indiv_recs = records
+                    # skip grouped accounts if "also individual" is off
+                    if groups and not also_individual:
+                        indiv_recs = [r for r in records
+                                      if r['account'].upper() not in all_grouped_uppers]
+                    else:
+                        indiv_recs = records
 
                 if layout == "per_metric":
                     status.markdown(f"Building overview slide for **{metric}**…")
