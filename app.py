@@ -508,9 +508,7 @@ else:
                         bar_path = build_bar_chart(adh_summary, chart_tmp)
                     add_account_metric_slide(
                         prs, adh_summary, week_label, quarter_label,
-                        chart_type=chart_type,
-                        bar_path=bar_path,
-                        adh_name=adh,
+                        chart_type, bar_path, None, adh
                     )
                     step += 1
                     progress.progress(min(step / total_steps, 1.0),
