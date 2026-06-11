@@ -26,10 +26,9 @@ def _chart_value(metric: str, value):
     if value is None:
         return 0
     try:
-        v = float(value)
+        return float(value)
     except (TypeError, ValueError):
         return 0
-    return abs(v) if metric == 'RD' else v
 
 
 def _sanitize_filename(name: str) -> str:

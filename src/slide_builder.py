@@ -58,11 +58,6 @@ def _strip_negative_prefix(value):
 
 
 def _positive_raw_for_metric(metric: str, value):
-    if metric == 'RD' and value is not None:
-        try:
-            return abs(float(value))
-        except (TypeError, ValueError):
-            return value
     return value
 
 
@@ -167,6 +162,89 @@ def add_title_slide(prs, week_label, quarter_label):
                   align=PP_ALIGN.CENTER)
 
 
+def add_compact_adh_table_slides(prs, metric: str, rows: list, week_label: str, quarter_label: str):
+    """Create a compact table-style slide for a single metric showing one row per selected ADH.
+
+    `rows` is a list of dicts: {'adh': str, 'plan_qtr': int, 'wk_plan': int, 'wk_act': int, 'gap': int, 'wow': int}
+    """
+    slide = _blank_slide(prs)
+
+    # header
+    hdr_h = Inches(0.88)
+    _add_rect(slide, 0, 0, SLIDE_W, hdr_h, fill_rgb=WHITE)
+    _add_rect(slide, 0, hdr_h, SLIDE_W, SLIDE_H - hdr_h, fill_rgb=WHITE, line_rgb=None)
+
+    badge_w = Inches(1.2)
+    _add_rect(slide, Inches(0.15), Inches(0.12), badge_w, Inches(0.56), fill_rgb=NAVY, line_rgb=None)
+    _add_text_box(slide, Inches(0.15), Inches(0.12), badge_w, Inches(0.56), metric, font_size=Pt(22), bold=True, color=WHITE, align=PP_ALIGN.CENTER)
+
+    _add_text_box(slide, Inches(1.6), Inches(0.16), Inches(8), Inches(0.5),
+                  f'{metric} — Selected ADHs', font_size=Pt(18), bold=True, color=NAVY, align=PP_ALIGN.LEFT)
+
+    _add_text_box(slide, Inches(10.5), Inches(0.2), Inches(2.7), Inches(0.45),
+                  f'{week_label}  |  {quarter_label}', font_size=Pt(10), bold=False, color=LBLUE, align=PP_ALIGN.RIGHT)
+
+    # table columns
+    col_hdrs = ['ADH', 'Plan QTR', 'WK Plan', 'WK Act', 'Gap', 'WoW']
+    n_cols = len(col_hdrs)
+    pad_x = Inches(0.3)
+    tbl_x = pad_x
+    tbl_y = Inches(1.1)
+    tbl_w = SLIDE_W - 2 * pad_x
+    acct_w = Inches(2.8)
+    rest_w = (tbl_w - acct_w) / (n_cols - 1)
+
+    hdr_h_row = Inches(0.36)
+    row_h = min(Inches(0.5), (SLIDE_H - tbl_y - hdr_h_row - Inches(0.6)) / max(len(rows), 1))
+
+    # header row
+    cx = tbl_x
+    for i, hdr in enumerate(col_hdrs):
+        cw = acct_w if i == 0 else rest_w
+        _add_rect(slide, cx, tbl_y, cw - Inches(0.02), hdr_h_row, fill_rgb=NAVY, line_rgb=None)
+        _add_text_box(slide, cx + Inches(0.04), tbl_y + Inches(0.04), cw - Inches(0.08), hdr_h_row - Inches(0.08),
+                      hdr, font_size=Pt(9), bold=True, color=WHITE, align=PP_ALIGN.CENTER)
+        cx += cw
+
+    # data rows
+    for ri, rec in enumerate(rows):
+        ry = tbl_y + hdr_h_row + ri * row_h
+        row_fill = WHITE if ri % 2 == 0 else LGRAY
+        cx = tbl_x
+
+        adh = rec.get('adh', '')
+        values = [rec.get('plan_qtr'), rec.get('wk_plan'), rec.get('wk_act'), rec.get('gap'), rec.get('wow')]
+
+        for ci in range(n_cols):
+            cw = acct_w if ci == 0 else rest_w
+            if ci == 0:
+                val = adh
+                txt_c = NAVY
+            else:
+                raw_v = values[ci - 1]
+                if raw_v is None:
+                    val = '—'
+                else:
+                    val = str(int(raw_v))
+                # color rules
+                if metric == 'RD' and isinstance(raw_v, (int, float)) and raw_v < 0:
+                    txt_c = RED
+                elif metric == 'Netadd' and isinstance(raw_v, (int, float)) and raw_v > 0:
+                    txt_c = GREEN
+                else:
+                    txt_c = NAVY
+
+            _add_rect(slide, cx, ry, cw - Inches(0.02), row_h, fill_rgb=row_fill, line_rgb=RGBColor(0xDD, 0xDD, 0xDD))
+            align = PP_ALIGN.LEFT if ci == 0 else PP_ALIGN.CENTER
+            _add_text_box(slide, cx + Inches(0.04), ry + Inches(0.06), cw - Inches(0.08), row_h - Inches(0.08),
+                          val, font_size=Pt(10 if ci==0 else 12), bold=(ci==0), color=txt_c, align=align)
+            cx += cw
+
+    # footnote
+    _add_text_box(slide, Inches(0.3), SLIDE_H - Inches(0.4), SLIDE_W - Inches(0.6), Inches(0.2),
+                  'Values truncated to integers. Netadd = RU + RD', font_size=Pt(9), bold=False, color=DGRAY, align=PP_ALIGN.LEFT)
+
+
 def add_account_metric_slide(prs, rec: dict, week_label: str, quarter_label: str,
                               chart_type: str, bar_path: str = None,
                               trend_path: str = None, adh_name: str | None = None):
@@ -227,12 +305,11 @@ def add_account_metric_slide(prs, rec: dict, week_label: str, quarter_label: str
                 rec['gap'],          rec.get('wow')]
 
     if metric == 'RD':
-        vals = [(_strip_negative_prefix(v) if isinstance(v, str) else v) for v in vals]
         raw_vals = [
             raw_vals[0],
-            _positive_raw_for_metric(metric, raw_vals[1]),
-            _positive_raw_for_metric(metric, raw_vals[2]),
-            _positive_raw_for_metric(metric, raw_vals[3]),
+            raw_vals[1],
+            raw_vals[2],
+            raw_vals[3],
             raw_vals[4],
         ]
 
@@ -275,12 +352,11 @@ def add_account_metric_slide(prs, rec: dict, week_label: str, quarter_label: str
                 rec['bpm_gap'],          rec.get('bpm_wow')]
 
     if metric == 'RD':
-        bpm_vals = [(_strip_negative_prefix(v) if isinstance(v, str) else v) for v in bpm_vals]
         bpm_raws = [
             bpm_raws[0],
-            _positive_raw_for_metric(metric, bpm_raws[1]),
-            _positive_raw_for_metric(metric, bpm_raws[2]),
-            _positive_raw_for_metric(metric, bpm_raws[3]),
+            bpm_raws[1],
+            bpm_raws[2],
+            bpm_raws[3],
             bpm_raws[4],
         ]
 
@@ -472,9 +548,6 @@ def add_metric_overview_slide(prs, records: list, metric: str,
             cw = acct_w if ci == 0 else rest_w
             raw_v = rec.get(gap_cols[ci]) if ci in gap_cols else (
                     rec.get(wow_cols[ci]) if ci in wow_cols else None)
-            if metric == 'RD' and ci in gap_cols and raw_v is not None:
-                raw_v = abs(raw_v)
-
             if ci in gap_cols and raw_v is not None:
                 _, fill_c = _gap_color(raw_v)
                 txt_c, _ = _gap_color(raw_v)
@@ -486,8 +559,7 @@ def add_metric_overview_slide(prs, records: list, metric: str,
                 txt_c  = DGRAY if ci == 0 else NAVY
 
             val_str = rec.get(key, '—')
-            if metric == 'RD' and isinstance(val_str, str) and key.startswith('fmt_'):
-                val_str = _strip_negative_prefix(val_str)
+            # preserve RD negative formatting exactly as loaded from data
             if ci in wow_cols:
                 val_str = _wow_label(raw_v)
             if val_str is None:
@@ -669,12 +741,9 @@ def add_grouped_accounts_slide(prs, records: list, metric: str,
 
         for ci, (lbl, cw, key, raw_key, is_gap, is_wow) in enumerate(col_defs):
             raw_v = rec.get(raw_key) if raw_key else None
-            if metric == 'RD' and is_gap and raw_v is not None:
-                raw_v = abs(raw_v)
 
             val   = rec.get(key, '—') or '—'
-            if metric == 'RD' and isinstance(val, str) and key.startswith('fmt_'):
-                val = _strip_negative_prefix(val)
+            # preserve RD negative formatting exactly as loaded from data
 
             if is_gap and raw_v is not None:
                 txt_c, fill_c = _gap_color(raw_v)

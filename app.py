@@ -14,6 +14,7 @@ from src.data_reader   import get_all_data
 from src.chart_builder import build_bar_chart, build_overview_chart, build_group_comparison_chart
 from src.slide_builder import (
     create_presentation, add_title_slide, add_account_metric_slide,
+    add_compact_adh_table_slides,
     add_metric_overview_slide, add_summary_slide, add_grouped_accounts_slide,
 )
 
@@ -300,6 +301,13 @@ if data_loaded:
         else:
             st.caption("No ADH group selected: all accounts will be shown in preview and only standard account/group slides will be generated.")
 
+        # Option: compact ADH-grid slides
+        compact_adh_mode = st.checkbox(
+            "Generate compact ADH-grid slides",
+            value=False,
+            help="Produce three clean slides (RU, RD, Netadd) that list selected ADHs in a single row each; removes bar charts for these slides.",
+        )
+
         st.markdown("---")
 
         # ── named group builder ────────────────────────────────────────────────
@@ -479,7 +487,7 @@ else:
                 for a in g['accounts']
             }
             group_steps = 0 if adh_only else len(groups) * len(selected_metrics)
-            adh_steps = len(selected_adhs) * len(selected_metrics)
+            adh_steps = len(selected_adhs) * 3 if compact_adh_mode else len(selected_adhs) * len(selected_metrics)
             indiv_steps = 0 if adh_only else sum(
                 len(filtered[m]) if layout in ("per_account", "per_account_combined") else 1
                 for m in selected_metrics
@@ -488,31 +496,72 @@ else:
             step = 0
 
             # ── selected ADH slides ──────────────────────────────────────────────
-            for metric in selected_metrics:
-                for adh in selected_adhs:
-                    adh_recs = [r for r in filtered[metric] if (r.get('adh') or '') == adh]
-                    if not adh_recs:
-                        step += 1
-                        continue
-                    status.markdown(
-                        f"Building **{adh}** — {metric} slide..."
-                    )
-                    account_names = sorted({r['account'] for r in adh_recs})
-                    account_label = ' · '.join(account_names)
-                    if len(account_label) > 120:
-                        account_label = account_label[:117] + '…'
-                    adh_summary = _build_adh_summary_record(adh, metric, adh_recs, account_label)
+            if compact_adh_mode and selected_adhs:
+                status.markdown("Building compact ADH summary slides...")
+                import math
+                keys = ['plan_qtr', 'wk_plan', 'wk_act', 'gap', 'wow']
+                ru_rows = []
+                rd_rows = []
 
-                    bar_path = None
-                    if chart_type in ("bar", "all"):
-                        bar_path = build_bar_chart(adh_summary, chart_tmp)
-                    add_account_metric_slide(
-                        prs, adh_summary, week_label, quarter_label,
-                        chart_type, bar_path, None, adh
-                    )
-                    step += 1
-                    progress.progress(min(step / total_steps, 1.0),
-                                      text=f"{adh} — {metric}")
+                for adh in selected_adhs:
+                    ru_tot = {k: 0.0 for k in keys}
+                    rd_tot = {k: 0.0 for k in keys}
+                    for r in all_data.get('RU', []):
+                        if (r.get('adh') or '') == adh:
+                            for k in keys:
+                                v = r.get(k)
+                                if isinstance(v, (int, float)):
+                                    ru_tot[k] += v
+                    for r in all_data.get('RD', []):
+                        if (r.get('adh') or '') == adh:
+                            for k in keys:
+                                v = r.get(k)
+                                if isinstance(v, (int, float)):
+                                    rd_tot[k] += v
+
+                    ru_rows.append({**{'adh': adh}, **{k: int(math.trunc(ru_tot[k])) for k in keys}})
+                    rd_rows.append({**{'adh': adh}, **{k: int(math.trunc(rd_tot[k])) for k in keys}})
+
+                net_rows = []
+                for adh in selected_adhs:
+                    ru_row = next((r for r in ru_rows if r['adh'] == adh), {})
+                    rd_row = next((r for r in rd_rows if r['adh'] == adh), {})
+                    net_rows.append({
+                        'adh': adh,
+                        **{k: int(math.trunc(ru_row.get(k, 0) + rd_row.get(k, 0))) for k in keys}
+                    })
+
+                add_compact_adh_table_slides(prs, 'RU', ru_rows, week_label, quarter_label)
+                add_compact_adh_table_slides(prs, 'RD', rd_rows, week_label, quarter_label)
+                add_compact_adh_table_slides(prs, 'Netadd', net_rows, week_label, quarter_label)
+                step += len(selected_adhs) * 3
+                progress.progress(min(step / total_steps, 1.0), text="Compact ADH slides generated")
+            else:
+                for metric in selected_metrics:
+                    for adh in selected_adhs:
+                        adh_recs = [r for r in filtered[metric] if (r.get('adh') or '') == adh]
+                        if not adh_recs:
+                            step += 1
+                            continue
+                        status.markdown(
+                            f"Building **{adh}** — {metric} slide..."
+                        )
+                        account_names = sorted({r['account'] for r in adh_recs})
+                        account_label = ' · '.join(account_names)
+                        if len(account_label) > 120:
+                            account_label = account_label[:117] + '…'
+                        adh_summary = _build_adh_summary_record(adh, metric, adh_recs, account_label)
+
+                        bar_path = None
+                        if chart_type in ("bar", "all"):
+                            bar_path = build_bar_chart(adh_summary, chart_tmp)
+                        add_account_metric_slide(
+                            prs, adh_summary, week_label, quarter_label,
+                            chart_type, bar_path, None, adh
+                        )
+                        step += 1
+                        progress.progress(min(step / total_steps, 1.0),
+                                          text=f"{adh} — {metric}")
 
             # ── named group slides (RU → RD → Netadd per group) ──────────────
             if not selected_adhs:

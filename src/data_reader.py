@@ -200,20 +200,12 @@ def _raw(val):
 
 
 def _positive_if_rd(metric: str, val):
-    if metric == 'RD' and val is not None:
-        try:
-            return abs(float(val))
-        except (TypeError, ValueError):
-            return val
+    # Preserve RD values as provided in the Excel source.
     return val
 
 
 def _invert_if_rd(metric: str, val):
-    if metric == 'RD' and val is not None:
-        try:
-            return -float(val)
-        except (TypeError, ValueError):
-            return val
+    # Preserve RD WOW values as provided in the Excel source.
     return val
 
 
