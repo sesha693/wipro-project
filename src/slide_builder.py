@@ -163,10 +163,39 @@ def add_title_slide(prs, week_label, quarter_label):
 
 
 def add_compact_adh_table_slides(prs, metric: str, rows: list, week_label: str, quarter_label: str):
-    """Create a compact table-style slide for a single metric showing one row per selected ADH.
+    """Create a compact single-row table slide for a metric showing all data in one row per ADH.
 
-    `rows` is a list of dicts: {'adh': str, 'plan_qtr': int, 'wk_plan': int, 'wk_act': int, 'gap': int, 'wow': int}
+    `rows` is a list of dicts with main + BPM metrics
     """
+    def _get_gap_bg_color(metric, gap_val):
+        """Return background color for gap cell based on metric type and gap value."""
+        if gap_val is None or gap_val == 0:
+            return LGRAY
+        # RU/Netadd: gap > 0 is BAD (red), gap < 0 is GOOD (green)
+        # RD: gap < 0 is GOOD (green), gap > 0 is BAD (red)
+        if metric in ('RU', 'Netadd'):
+            return RED_BG if gap_val > 0 else GREEN_BG
+        elif metric == 'RD':
+            return GREEN_BG if gap_val < 0 else RED_BG
+        return LGRAY
+
+    def _get_wow_bg_color(metric, wow_val):
+        """Return background color for WoW cell."""
+        if wow_val is None or wow_val == 0:
+            return LGRAY
+        if metric in ('RU', 'Netadd'):
+            return GREEN_BG if wow_val > 0 else RED_BG
+        elif metric == 'RD':
+            return GREEN_BG if wow_val < 0 else RED_BG
+        return LGRAY
+
+    def _fmt_cell_value(raw_v):
+        if raw_v is None:
+            return '—'
+        if isinstance(raw_v, (int, float)):
+            return str(int(raw_v))
+        return str(raw_v)
+
     slide = _blank_slide(prs)
 
     # header
@@ -184,65 +213,83 @@ def add_compact_adh_table_slides(prs, metric: str, rows: list, week_label: str, 
     _add_text_box(slide, Inches(10.5), Inches(0.2), Inches(2.7), Inches(0.45),
                   f'{week_label}  |  {quarter_label}', font_size=Pt(10), bold=False, color=LBLUE, align=PP_ALIGN.RIGHT)
 
-    # table columns
-    col_hdrs = ['ADH', 'Plan QTR', 'WK Plan', 'WK Act', 'Gap', 'WoW']
+    # Single compact table with all columns in one row
+    col_hdrs = ['ADH', 'Plan QTR', 'WK Pln', 'WK Act', 'Gap', 'WoW', 'BPM Plan QTR', 'BPM WK Pln', 'BPM WK Act', 'BPM Gap', 'BPM WoW']
     n_cols = len(col_hdrs)
-    pad_x = Inches(0.3)
+    pad_x = Inches(0.25)
     tbl_x = pad_x
     tbl_y = Inches(1.1)
     tbl_w = SLIDE_W - 2 * pad_x
-    acct_w = Inches(2.8)
-    rest_w = (tbl_w - acct_w) / (n_cols - 1)
+    hdr_h_row = Inches(0.32)
+    row_h = Inches(0.42)
 
-    hdr_h_row = Inches(0.36)
-    row_h = min(Inches(0.5), (SLIDE_H - tbl_y - hdr_h_row - Inches(0.6)) / max(len(rows), 1))
+    # Column widths: ADH wider, others proportional
+    adh_w = Inches(1.0)
+    other_w = (tbl_w - adh_w) / (n_cols - 1)
+    col_widths = [adh_w] + [other_w] * (n_cols - 1)
 
     # header row
     cx = tbl_x
     for i, hdr in enumerate(col_hdrs):
-        cw = acct_w if i == 0 else rest_w
-        _add_rect(slide, cx, tbl_y, cw - Inches(0.02), hdr_h_row, fill_rgb=NAVY, line_rgb=None)
-        _add_text_box(slide, cx + Inches(0.04), tbl_y + Inches(0.04), cw - Inches(0.08), hdr_h_row - Inches(0.08),
-                      hdr, font_size=Pt(9), bold=True, color=WHITE, align=PP_ALIGN.CENTER)
+        cw = col_widths[i]
+        _add_rect(slide, cx, tbl_y, cw - Inches(0.01), hdr_h_row, fill_rgb=BLUE, line_rgb=None)
+        font_sz = Pt(7) if len(hdr) > 10 else Pt(7.5)
+        _add_text_box(slide, cx + Inches(0.02), tbl_y + Inches(0.02), cw - Inches(0.04), hdr_h_row - Inches(0.04),
+                      hdr, font_size=font_sz, bold=True, color=WHITE, align=PP_ALIGN.CENTER)
         cx += cw
 
     # data rows
     for ri, rec in enumerate(rows):
         ry = tbl_y + hdr_h_row + ri * row_h
-        row_fill = WHITE if ri % 2 == 0 else LGRAY
+        row_fill = WHITE if ri % 2 == 0 else RGBColor(0xF5, 0xF5, 0xF5)
         cx = tbl_x
 
-        adh = rec.get('adh', '')
-        values = [rec.get('plan_qtr'), rec.get('wk_plan'), rec.get('wk_act'), rec.get('gap'), rec.get('wow')]
+        # Collect all values in order
+        values = [
+            rec.get('adh', ''),
+            rec.get('plan_qtr'),
+            rec.get('wk_plan'),
+            rec.get('wk_act'),
+            rec.get('gap'),
+            rec.get('wow'),
+            rec.get('bpm_plan_qtr'),
+            rec.get('bpm_wk_plan'),
+            rec.get('bpm_wk_act'),
+            rec.get('bpm_gap'),
+            rec.get('bpm_wow'),
+        ]
 
-        for ci in range(n_cols):
-            cw = acct_w if ci == 0 else rest_w
+        for ci, raw_v in enumerate(values):
+            cw = col_widths[ci]
+            
             if ci == 0:
-                val = adh
-                txt_c = NAVY
+                # ADH name
+                val = str(raw_v)
+                cell_fill = row_fill
             else:
-                raw_v = values[ci - 1]
-                if raw_v is None:
-                    val = '—'
+                val = _fmt_cell_value(raw_v)
+                # Apply gap coloring (columns 4 and 9)
+                if ci == 4:  # Gap
+                    cell_fill = _get_gap_bg_color(metric, raw_v)
+                elif ci == 9:  # BPM Gap
+                    cell_fill = _get_gap_bg_color(metric, raw_v)
+                # Apply WoW coloring (columns 5 and 10)
+                elif ci == 5 or ci == 10:  # WoW columns
+                    cell_fill = _get_wow_bg_color(metric, raw_v)
                 else:
-                    val = str(int(raw_v))
-                # color rules
-                if metric == 'RD' and isinstance(raw_v, (int, float)) and raw_v < 0:
-                    txt_c = RED
-                elif metric == 'Netadd' and isinstance(raw_v, (int, float)) and raw_v > 0:
-                    txt_c = GREEN
-                else:
-                    txt_c = NAVY
+                    cell_fill = row_fill
 
-            _add_rect(slide, cx, ry, cw - Inches(0.02), row_h, fill_rgb=row_fill, line_rgb=RGBColor(0xDD, 0xDD, 0xDD))
+            _add_rect(slide, cx, ry, cw - Inches(0.01), row_h, fill_rgb=cell_fill, line_rgb=RGBColor(0xDD, 0xDD, 0xDD))
             align = PP_ALIGN.LEFT if ci == 0 else PP_ALIGN.CENTER
-            _add_text_box(slide, cx + Inches(0.04), ry + Inches(0.06), cw - Inches(0.08), row_h - Inches(0.08),
-                          val, font_size=Pt(10 if ci==0 else 12), bold=(ci==0), color=txt_c, align=align)
+            font_sz = Pt(9) if ci == 0 else Pt(8.5)
+            _add_text_box(slide, cx + Inches(0.02), ry + Inches(0.05), cw - Inches(0.04), row_h - Inches(0.1),
+                          val, font_size=font_sz, bold=(ci == 0), color=DGRAY, align=align)
             cx += cw
 
     # footnote
-    _add_text_box(slide, Inches(0.3), SLIDE_H - Inches(0.4), SLIDE_W - Inches(0.6), Inches(0.2),
-                  'Values truncated to integers. Netadd = RU + RD', font_size=Pt(9), bold=False, color=DGRAY, align=PP_ALIGN.LEFT)
+    _add_text_box(slide, Inches(0.3), SLIDE_H - Inches(0.35), SLIDE_W - Inches(0.6), Inches(0.2),
+                  'Green = Good performance  |  Red = Below target  |  Netadd = RU + RD', 
+                  font_size=Pt(8), bold=False, color=DGRAY, align=PP_ALIGN.LEFT)
 
 
 def add_account_metric_slide(prs, rec: dict, week_label: str, quarter_label: str,

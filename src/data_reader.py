@@ -1,4 +1,5 @@
 import pandas as pd
+import re
 
 
 _SHEET_MAP = {
@@ -90,9 +91,38 @@ KNOWN_ADH_MAP = {
 
 def _text(val):
     """Clean text value."""
-    if val is None or (isinstance(val, float) and pd.isna(val)):
+    if pd.isna(val):
         return ''
-    return str(val).strip()
+    text = str(val).strip()
+    if not text or text.lower() in ('nan', 'none', 'na', 'n/a', '--'):
+        return ''
+    return text
+
+
+def _normalize_adh_value(value):
+    if pd.isna(value):
+        return ''
+
+    text = _text(value)
+    if not text:
+        return ''
+
+    normalized = _normalize_column_label(text)
+    # Remove common ADH prefixes or labels from the raw value.
+    normalized = re.sub(
+        r'^(adh|account delivery head|delivery head|account head|adh[:\-]?|adh\s+)',
+        '', normalized,
+        flags=re.IGNORECASE
+    ).strip()
+
+    if normalized in KNOWN_ADH_MAP:
+        return KNOWN_ADH_MAP[normalized]
+
+    for known_norm, canonical in KNOWN_ADH_MAP.items():
+        if known_norm in normalized or normalized in known_norm:
+            return canonical
+
+    return text
 
 
 def _match_column_name(raw_label: str, known_labels: dict) -> str | None:
@@ -101,6 +131,11 @@ def _match_column_name(raw_label: str, known_labels: dict) -> str | None:
         return known_labels[normalized]
 
     tokens = set(normalized.split())
+    
+    # Helper to check if tokens contain quarterly/quarter-like words
+    def has_qtr_token(tokens):
+        return any(tok.startswith(('qtr', 'q1', 'quarter', 'quarterly', 'qtd')) for tok in tokens)
+    
     if 'account' in tokens:
         return 'account'
     if 'recovery' in tokens and 'plan' in tokens:
@@ -123,7 +158,7 @@ def _match_column_name(raw_label: str, known_labels: dict) -> str | None:
             return 'bpm_wow'
         if 'prev' in tokens and 'gap' in tokens:
             return 'bpm_prev_gap'
-        if 'plan' in tokens and any(x in tokens for x in ('qtr', 'q1', 'qtd', 'quarter')):
+        if 'plan' in tokens and has_qtr_token(tokens):
             return 'bpm_plan_qtr'
         if 'plan' in tokens:
             return 'bpm_wk_plan'
@@ -131,13 +166,13 @@ def _match_column_name(raw_label: str, known_labels: dict) -> str | None:
             return 'bpm_wk_act'
     if 'gap' in tokens:
         return 'gap'
-    if 'wow' in tokens:
+    if 'wow' in tokens or 'woow' in tokens:
         return 'wow'
     if 'prev' in tokens and 'gap' in tokens:
         return 'prev_gap'
     if 'plan' in tokens and 'qtd' in tokens:
         return 'wk_plan'
-    if 'plan' in tokens and any(x in tokens for x in ('qtr', 'q1', 'quarter')):
+    if 'plan' in tokens and has_qtr_token(tokens):
         return 'plan_qtr'
     if 'plan' in tokens:
         return 'wk_plan'
@@ -145,20 +180,6 @@ def _match_column_name(raw_label: str, known_labels: dict) -> str | None:
         return 'wk_act'
     return None
 
-
-def _normalize_adh_value(value):
-    if value is None:
-        return ''
-    text = _text(value)
-    if not text:
-        return ''
-    normalized = _normalize_column_label(text)
-    if normalized in KNOWN_ADH_MAP:
-        return KNOWN_ADH_MAP[normalized]
-    for known_norm, canonical in KNOWN_ADH_MAP.items():
-        if known_norm in normalized or normalized in known_norm:
-            return canonical
-    return text
 
 
 def _clean_number(val):
@@ -318,18 +339,18 @@ def _derive_netadd_records(ru_records: list[dict], rd_records: list[dict]) -> li
         rd = rd_map.get(key, {})
         account = ru.get('account') or rd.get('account') or key
 
-        plan_qtr = _safe(ru.get('plan_qtr')) - _safe(rd.get('plan_qtr'))
-        wk_plan = _safe(ru.get('wk_plan')) - _safe(rd.get('wk_plan'))
-        wk_act = _safe(ru.get('wk_act')) - _safe(rd.get('wk_act'))
+        plan_qtr = _safe(ru.get('plan_qtr')) + _safe(rd.get('plan_qtr'))
+        wk_plan = _safe(ru.get('wk_plan')) + _safe(rd.get('wk_plan'))
+        wk_act = _safe(ru.get('wk_act')) + _safe(rd.get('wk_act'))
         gap = wk_act - wk_plan
-        prev_gap = _safe(ru.get('prev_gap')) - _safe(rd.get('prev_gap'))
-        wow = _safe(ru.get('wow')) - _safe(rd.get('wow'))
-        bpm_plan_qtr = _safe(ru.get('bpm_plan_qtr')) - _safe(rd.get('bpm_plan_qtr'))
-        bpm_wk_plan = _safe(ru.get('bpm_wk_plan')) - _safe(rd.get('bpm_wk_plan'))
-        bpm_wk_act = _safe(ru.get('bpm_wk_act')) - _safe(rd.get('bpm_wk_act'))
+        prev_gap = _safe(ru.get('prev_gap')) + _safe(rd.get('prev_gap'))
+        wow = _safe(ru.get('wow')) + _safe(rd.get('wow'))
+        bpm_plan_qtr = _safe(ru.get('bpm_plan_qtr')) + _safe(rd.get('bpm_plan_qtr'))
+        bpm_wk_plan = _safe(ru.get('bpm_wk_plan')) + _safe(rd.get('bpm_wk_plan'))
+        bpm_wk_act = _safe(ru.get('bpm_wk_act')) + _safe(rd.get('bpm_wk_act'))
         bpm_gap = bpm_wk_act - bpm_wk_plan
-        bpm_prev_gap = _safe(ru.get('bpm_prev_gap')) - _safe(rd.get('bpm_prev_gap'))
-        bpm_wow = _safe(ru.get('bpm_wow')) - _safe(rd.get('bpm_wow'))
+        bpm_prev_gap = _safe(ru.get('bpm_prev_gap')) + _safe(rd.get('bpm_prev_gap'))
+        bpm_wow = _safe(ru.get('bpm_wow')) + _safe(rd.get('bpm_wow'))
 
         rec = {
             'account': account,
@@ -364,6 +385,28 @@ def _derive_netadd_records(ru_records: list[dict], rd_records: list[dict]) -> li
     return records
 
 
+def _merge_actual_netadd(derived_records: list[dict], actual_records: list[dict]) -> list[dict]:
+    actual_map = {r['account'].strip().upper(): r for r in actual_records}
+    merged = []
+    seen_accounts = set()
+
+    for derived in derived_records:
+        account_key = derived['account'].strip().upper()
+        actual = actual_map.get(account_key)
+        if actual is not None:
+            merged.append({**derived, **actual})
+        else:
+            merged.append(derived)
+        seen_accounts.add(account_key)
+
+    for actual in actual_records:
+        account_key = actual['account'].strip().upper()
+        if account_key not in seen_accounts:
+            merged.append(actual)
+
+    return merged
+
+
 def get_all_data(filepath: str, metrics: list, accounts_filter) -> dict:
     result = {}
     for m in metrics:
@@ -373,7 +416,13 @@ def get_all_data(filepath: str, metrics: list, accounts_filter) -> dict:
 
     if 'Netadd' in metrics:
         if 'RU' in result and 'RD' in result:
-            result['Netadd'] = _derive_netadd_records(result['RU'], result['RD'])
+            derived_netadd = _derive_netadd_records(result['RU'], result['RD'])
+            try:
+                actual_netadd = load_metric(filepath, 'Netadd', accounts_filter)
+            except Exception:
+                result['Netadd'] = derived_netadd
+            else:
+                result['Netadd'] = _merge_actual_netadd(derived_netadd, actual_netadd)
         else:
             result['Netadd'] = load_metric(filepath, 'Netadd', accounts_filter)
 

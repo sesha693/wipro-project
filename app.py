@@ -499,28 +499,37 @@ else:
             if compact_adh_mode and selected_adhs:
                 status.markdown("Building compact ADH summary slides...")
                 import math
-                keys = ['plan_qtr', 'wk_plan', 'wk_act', 'gap', 'wow']
+
+                numeric_keys = ['plan_qtr', 'wk_plan', 'wk_act', 'gap', 'wow', 'bpm_plan_qtr', 'bpm_wk_plan', 'bpm_wk_act', 'bpm_gap', 'bpm_wow']
+                text_keys = []
                 ru_rows = []
                 rd_rows = []
 
                 for adh in selected_adhs:
-                    ru_tot = {k: 0.0 for k in keys}
-                    rd_tot = {k: 0.0 for k in keys}
+                    ru_tot = {k: 0.0 for k in numeric_keys}
+                    rd_tot = {k: 0.0 for k in numeric_keys}
+
                     for r in all_data.get('RU', []):
                         if (r.get('adh') or '') == adh:
-                            for k in keys:
+                            for k in numeric_keys:
                                 v = r.get(k)
                                 if isinstance(v, (int, float)):
                                     ru_tot[k] += v
                     for r in all_data.get('RD', []):
                         if (r.get('adh') or '') == adh:
-                            for k in keys:
+                            for k in numeric_keys:
                                 v = r.get(k)
                                 if isinstance(v, (int, float)):
                                     rd_tot[k] += v
 
-                    ru_rows.append({**{'adh': adh}, **{k: int(math.trunc(ru_tot[k])) for k in keys}})
-                    rd_rows.append({**{'adh': adh}, **{k: int(math.trunc(rd_tot[k])) for k in keys}})
+                    ru_rows.append({
+                        'adh': adh,
+                        **{k: int(math.trunc(ru_tot[k])) for k in numeric_keys}
+                    })
+                    rd_rows.append({
+                        'adh': adh,
+                        **{k: int(math.trunc(rd_tot[k])) for k in numeric_keys}
+                    })
 
                 net_rows = []
                 for adh in selected_adhs:
@@ -528,7 +537,7 @@ else:
                     rd_row = next((r for r in rd_rows if r['adh'] == adh), {})
                     net_rows.append({
                         'adh': adh,
-                        **{k: int(math.trunc(ru_row.get(k, 0) + rd_row.get(k, 0))) for k in keys}
+                        **{k: int(math.trunc((ru_row.get(k, 0) or 0) + (rd_row.get(k, 0) or 0))) for k in numeric_keys}
                     })
 
                 add_compact_adh_table_slides(prs, 'RU', ru_rows, week_label, quarter_label)
