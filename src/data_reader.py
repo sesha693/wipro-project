@@ -8,14 +8,14 @@ _SHEET_MAP = {
         'col_map': {
             'Account':           'account',
             'RU Plan QTR':       'plan_qtr',
-            'RU Plan':      'wk_plan',
-            'RU Act':       'wk_act',
+            'RU Plan':           'wk_plan',
+            'RU Act':            'wk_act',
             'RU Gap':            'gap',
             'Prev WK GAP':       'prev_gap',
             'WOW':               'wow',
             'RU Plan BPM QTR':   'bpm_plan_qtr',
-            'RU Plan BPM':  'bpm_wk_plan',
-            'RU Act BPM':   'bpm_wk_act',
+            'RU Plan BPM':       'bpm_wk_plan',
+            'RU Act BPM':        'bpm_wk_act',
             'RU BPM Gap':        'bpm_gap',
             'Prev week gap':     'bpm_prev_gap',
             'WOW BPM':           'bpm_wow',
@@ -76,21 +76,33 @@ KNOWN_ADH_NAMES = [
     "Manu", "RK", "Manish", "VSV Ramesh", "LK", "Solomon",
 ]
 
-def _normalize_column_label(value: str) -> str:
+def _normalize_text(value) -> str:
     if value is None:
         return ''
+    if isinstance(value, (pd.Series, pd.Index)):
+        if len(value) == 0:
+            return ''
+        value = value.iloc[0]
     text = str(value).strip().lower()
-    text = ''.join(ch if ch.isalnum() else ' ' for ch in text)
+    text = re.sub(r'[^a-z0-9]+', ' ', text)
     return ' '.join(text.split())
 
+
+def _normalize_column_label(value: str) -> str:
+    return _normalize_text(value)
+
 KNOWN_ADH_MAP = {
-    _normalize_column_label(name): name
+    _normalize_text(name): name
     for name in KNOWN_ADH_NAMES
 }
 
 
 def _text(val):
     """Clean text value."""
+    if isinstance(val, (pd.Series, pd.Index)):
+        if len(val) == 0:
+            return ''
+        val = val.iloc[0]
     if pd.isna(val):
         return ''
     text = str(val).strip()
@@ -100,6 +112,10 @@ def _text(val):
 
 
 def _normalize_adh_value(value):
+    if isinstance(value, (pd.Series, pd.Index)):
+        if len(value) == 0:
+            return ''
+        value = value.iloc[0]
     if pd.isna(value):
         return ''
 
@@ -125,18 +141,55 @@ def _normalize_adh_value(value):
     return text
 
 
+def _find_sheet_name(xls, metric: str) -> str:
+    requested = _normalize_text(_SHEET_MAP[metric]['sheet'])
+    sheets = list(xls.sheet_names)
+    lower_map = {name.lower(): name for name in sheets}
+    if requested in lower_map:
+        return lower_map[requested]
+
+    metric_tokens = {
+        'RU': ['ru', 'resource', 'utilization', 'utilisation'],
+        'RD': ['rd', 'resource', 'deallocation', 'de-alloc', 'dealloc'],
+        'Netadd': ['net', 'netadd', 'net add', 'net addition', 'netaddition'],
+    }.get(metric, [requested])
+
+    for name in sheets:
+        norm = _normalize_text(name)
+        if any(token in norm for token in metric_tokens):
+            return name
+
+    for name in sheets:
+        if requested in _normalize_text(name):
+            return name
+
+    return xls.sheet_names[0]
+
+
+def _find_header_row(xls, sheet_name: str, normalized_labels: dict) -> int | None:
+    preview = pd.read_excel(xls, sheet_name=sheet_name, header=None, nrows=20)
+    best = (-1, None)
+    for row_index, row in preview.iterrows():
+        matches = 0
+        for cell in row:
+            if _match_column_name(cell, normalized_labels):
+                matches += 1
+        if matches > best[0]:
+            best = (matches, row_index)
+    return best[1] if best[0] >= 3 else None
+
+
 def _match_column_name(raw_label: str, known_labels: dict) -> str | None:
     normalized = _normalize_column_label(raw_label)
     if normalized in known_labels:
         return known_labels[normalized]
 
     tokens = set(normalized.split())
-    
-    # Helper to check if tokens contain quarterly/quarter-like words
+
     def has_qtr_token(tokens):
-        return any(tok.startswith(('qtr', 'q1', 'quarter', 'quarterly', 'qtd')) for tok in tokens)
-    
-    if 'account' in tokens:
+        return any(tok.startswith(('qtr', 'q1', 'q2', 'q3', 'q4', 'qtd', 'quarter', 'quarterly')) for tok in tokens)
+
+    if 'account' in tokens or 'client' in tokens or 'name' in tokens and 'account' in tokens:
         return 'account'
     if 'recovery' in tokens and 'plan' in tokens:
         return 'recovery_plan'
@@ -162,16 +215,14 @@ def _match_column_name(raw_label: str, known_labels: dict) -> str | None:
             return 'bpm_plan_qtr'
         if 'plan' in tokens:
             return 'bpm_wk_plan'
-        if 'act' in tokens:
+        if 'act' in tokens or 'actual' in tokens:
             return 'bpm_wk_act'
-    if 'gap' in tokens:
-        return 'gap'
     if 'wow' in tokens or 'woow' in tokens:
         return 'wow'
     if 'prev' in tokens and 'gap' in tokens:
         return 'prev_gap'
-    if 'plan' in tokens and 'qtd' in tokens:
-        return 'wk_plan'
+    if 'gap' in tokens:
+        return 'gap'
     if 'plan' in tokens and has_qtr_token(tokens):
         return 'plan_qtr'
     if 'plan' in tokens:
@@ -183,6 +234,10 @@ def _match_column_name(raw_label: str, known_labels: dict) -> str | None:
 
 
 def _clean_number(val):
+    if isinstance(val, (pd.Series, pd.Index)):
+        if len(val) == 0:
+            return None
+        val = val.iloc[0]
     if val is None or (isinstance(val, float) and pd.isna(val)):
         return None
     if isinstance(val, str):
@@ -249,28 +304,48 @@ def load_metric(filepath: str, metric: str, accounts_filter) -> list[dict]:
         sheet_name = lower_names.get(sheet_name.lower(), sheet_name)
 
     df = None
-    for header in (0, 1):
-        candidate = pd.read_excel(xls, sheet_name=sheet_name, header=header)
-        normalized_map = {
-            _normalize_column_label(raw): dest
-            for raw, dest in cfg['col_map'].items()
-        }
+    sheet_name = _find_sheet_name(xls, metric)
+    normalized_map = {
+        _normalize_column_label(raw): dest
+        for raw, dest in cfg['col_map'].items()
+    }
+
+    df = None
+    header_row = _find_header_row(xls, sheet_name, normalized_map)
+    if header_row is not None:
+        candidate = pd.read_excel(xls, sheet_name=sheet_name, header=header_row)
         rename_map = {}
         for col in candidate.columns:
             mapped = _match_column_name(col, normalized_map)
             if mapped:
                 rename_map[col] = mapped
         candidate = candidate.rename(columns=rename_map)
+        if candidate.columns.duplicated().any():
+            candidate = candidate.loc[:, ~candidate.columns.duplicated()]
         if 'account' in candidate.columns:
             df = candidate
-            break
+
+    if df is None:
+        for header in (0, 1, 2):
+            candidate = pd.read_excel(xls, sheet_name=sheet_name, header=header)
+            rename_map = {}
+            for col in candidate.columns:
+                mapped = _match_column_name(col, normalized_map)
+                if mapped:
+                    rename_map[col] = mapped
+            candidate = candidate.rename(columns=rename_map)
+            if candidate.columns.duplicated().any():
+                candidate = candidate.loc[:, ~candidate.columns.duplicated()]
+            if 'account' in candidate.columns:
+                df = candidate
+                break
     if df is None or 'account' not in df.columns:
         raise ValueError(f"Unable to locate the account column for metric '{metric}' in sheet '{sheet_name}'")
 
-    # drop rows without a valid account name
-    df = df[df['account'].notna()]
-    df = df[df['account'].astype(str).str.strip() != '']
-    df = df[~df['account'].astype(str).str.lower().str.contains('grand total|total')]
+    # normalize account values to text and drop invalid rows
+    df['account'] = df['account'].apply(lambda v: _text(v))
+    df = df[df['account'] != '']
+    df = df[~df['account'].str.lower().str.contains('grand total|total', na=False)]
 
     if accounts_filter != 'all':
         upper = [a.upper() for a in accounts_filter]
